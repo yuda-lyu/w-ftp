@@ -1,6 +1,7 @@
 import path from 'path'
 import fs from 'fs'
 import WFtp from './src/WFtp.mjs'
+// import WFtp from './dist/w-ftp.umd.js'
 
 
 //st

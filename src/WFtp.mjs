@@ -516,8 +516,7 @@ async function ftpSyncToRemote(fdLocal, fdRemote, cbProcess) {
  *
  */
 function WFtp() {
-    let t = this
-    t._ = {
+    let doc = {
         doc_ftpConn: ftpConn,
         doc_ftpLs: ftpLs,
         doc_ftpQuit: ftpQuit,
@@ -574,6 +573,7 @@ function WFtp() {
                     user: username, // defaults to "anonymous"
                     pass: password, // defaults to "@anonymous"
                 })
+                Ftp.__doc__ = doc
                 pm.resolve('ok')
             }
             catch (err) {
