@@ -7,7 +7,7 @@ let fdTar = './dist'
 
 
 rollupFiles({
-    fns: 'WDataMseed.mjs',
+    fns: 'WFtp.mjs',
     fdSrc,
     fdTar,
     nameDistType: 'kebabCase',
