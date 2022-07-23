@@ -27,7 +27,7 @@
 
 <nav >
     
-    <h2><a href="index.html">Home</a></h2><h3>Global</h3><ul><li><a href="global.html#WFtp">WFtp</a></li></ul>
+    <h2><a href="index.html">Home</a></h2><h3>Global</h3><ul><li><a href="global.html#ftpCheckFile">ftpCheckFile</a></li><li><a href="global.html#ftpConn">ftpConn</a></li><li><a href="global.html#ftpDownload">ftpDownload</a></li><li><a href="global.html#ftpLs">ftpLs</a></li><li><a href="global.html#ftpQuit">ftpQuit</a></li><li><a href="global.html#ftpStateFile">ftpStateFile</a></li><li><a href="global.html#ftpSyncToLocal">ftpSyncToLocal</a></li><li><a href="global.html#ftpSyncToRemote">ftpSyncToRemote</a></li><li><a href="global.html#ftpUpload">ftpUpload</a></li><li><a href="global.html#WFtp">WFtp</a></li></ul>
 </nav>
 
 <div id="main">
@@ -64,55 +64,514 @@ import fsTreeFolder from 'wsemi/src/fsTreeFolder.mjs'
 import fsIsFolder from 'wsemi/src/fsIsFolder.mjs'
 import fsIsFile from 'wsemi/src/fsIsFile.mjs'
 import fsCreateFolder from 'wsemi/src/fsCreateFolder.mjs'
-// import Jsftp from 'jsftp'
 import Jsftp from './jsftp.js'
-console.log('Jsftp', Jsftp)
 
 
 /**
- * 指定FTP伺服器資料夾內檔案並自動同步至本機，只能用於Windows作業系統
+ * 連線至FPT伺服器
  *
- * @param {String} fp 輸入檔案路徑字串
  * @param {Object} [opt={}] 輸入設定物件，預設{}
- * @param {String} [opt.ver='4.8'] 輸入調用windows程序之Net Framework版本字串，可有'4.5'、'4.6'、'4.7.2'與'4.8'，預設'4.8'
- * @returns {Promise} 回傳Promise，resolve回傳成功訊息，reject回傳錯誤訊息
+ * @param {String} opt.hostname='' 輸入hostname字串
+ * @param {Number} opt.port='' 輸入port正整數
+ * @param {String} opt.username='' 輸入帳號字串
+ * @param {String} opt.password='' 輸入密碼字串
+ * @return {Promise} 回傳Promise，resolve回傳成功訊息，reject回傳錯誤訊息
  * @example
  * import WFtp from './src/WFtp.mjs'
  *
  * async function test() {
+ *     let r
  *
- *     //fp
- *     let fp = './g.mseed'
+ *     let ftp = WFtp()
+ *     // console.log('ftp', ftp)
  *
- *     //WFtp
- *     let r = await WFtp(fp)
- *     console.log(r)
- *     // [
- *     //   {
- *     //     name: 'SE.RST01.00.HNE.D.2020-09-17T013552.000000.csv',
- *     //     path: null,
- *     //     data: { heads: [Object], records: [Array] }
- *     //   },
- *     //   {
- *     //     name: 'SE.RST01.00.HNN.D.2020-09-17T013552.000000.csv',
- *     //     path: null,
- *     //     data: { heads: [Object], records: [Array] }
- *     //   },
- *     //   {
- *     //     name: 'SE.RST01.00.HNZ.D.2020-09-17T013552.000000.csv',
- *     //     path: null,
- *     //     data: { heads: [Object], records: [Array] }
- *     //   }
- *     // ]
+ *     await ftp.conn({
+ *         hostname: st.up.hostname,
+ *         port: st.up.port,
+ *         username: st.up.username,
+ *         password: st.up.password,
+ *     })
+ *
+ *     //actions
+ *
+ *     r = await ftp.quit()
+ *     console.log('ftp.quit', r)
  *
  * }
  * test()
  *     .catch((err) => {
- *         console.log('catch', err)
+ *         console.log(err)
  *     })
  *
  */
+async function ftpConn(opt = {}) {
+    return null
+}
+
+
+/**
+ * 遍歷伺服器上指定資料夾內檔案清單資訊
+ *
+ * @param {String} opt.fdRemote 輸入伺服器上指定資料夾字串
+ * @return {Promise} 回傳Promise，resolve回傳檔案清單資訊，reject回傳錯誤訊息
+ * @example
+ * import WFtp from './src/WFtp.mjs'
+ *
+ * async function test() {
+ *     let r
+ *
+ *     let ftp = WFtp()
+ *     // console.log('ftp', ftp)
+ *
+ *     await ftp.conn({
+ *         hostname: st.up.hostname,
+ *         port: st.up.port,
+ *         username: st.up.username,
+ *         password: st.up.password,
+ *     })
+ *
+ *     let fps = await ftp.ls('.')
+ *     console.log('ftp.ls', fps[0], fps.length)
+ *
+ *     r = await ftp.quit()
+ *     console.log('ftp.quit', r)
+ *
+ * }
+ * test()
+ *     .catch((err) => {
+ *         console.log(err)
+ *     })
+ *
+ */
+async function ftpLs(fdRemote = '.') {
+    return null
+}
+
+
+/**
+ * 關閉與伺服器連線
+ *
+ * @return {Promise} 回傳Promise，resolve回傳成功訊息，reject回傳錯誤訊息
+ * @example
+ * import WFtp from './src/WFtp.mjs'
+ *
+ * async function test() {
+ *     let r
+ *
+ *     let ftp = WFtp()
+ *     // console.log('ftp', ftp)
+ *
+ *     await ftp.conn({
+ *         hostname: st.up.hostname,
+ *         port: st.up.port,
+ *         username: st.up.username,
+ *         password: st.up.password,
+ *     })
+ *
+ *     //actions
+ *
+ *     r = await ftp.quit()
+ *     console.log('ftp.quit', r)
+ *
+ * }
+ * test()
+ *     .catch((err) => {
+ *         console.log(err)
+ *     })
+ */
+async function ftpQuit() {
+    return null
+}
+
+
+/**
+ * 取得伺服器指定檔案資訊
+ *
+ * @param {String} opt.fpRemote 輸入伺服器上指定檔案字串
+ * @return {Promise} 回傳Promise，resolve回傳檔案資訊，reject回傳錯誤訊息
+ * @example
+ * import WFtp from './src/WFtp.mjs'
+ *
+ * async function test() {
+ *     let r
+ *
+ *     let ftp = WFtp()
+ *     // console.log('ftp', ftp)
+ *
+ *     await ftp.conn({
+ *         hostname: st.up.hostname,
+ *         port: st.up.port,
+ *         username: st.up.username,
+ *         password: st.up.password,
+ *     })
+ *
+ *     r = await ftp.stateFile('./_test_upload_client/DECL_20210805055044.csv')
+ *     console.log('ftp.stateFile', r)
+ *
+ *     r = await ftp.quit()
+ *     console.log('ftp.quit', r)
+ *
+ * }
+ * test()
+ *     .catch((err) => {
+ *         console.log(err)
+ *     })
+ */
+async function ftpStateFile(fpRemote) {
+    return null
+}
+
+
+/**
+ * 確認伺服器指定檔案是否存在
+ *
+ * @param {String} opt.fpRemote 輸入伺服器上指定檔案字串
+ * @return {Promise} 回傳Promise，resolve回傳指定檔案是否存在布林值，reject回傳錯誤訊息
+ * @example
+ * import WFtp from './src/WFtp.mjs'
+ *
+ * async function test() {
+ *     let r
+ *
+ *     let ftp = WFtp()
+ *     // console.log('ftp', ftp)
+ *
+ *     await ftp.conn({
+ *         hostname: st.up.hostname,
+ *         port: st.up.port,
+ *         username: st.up.username,
+ *         password: st.up.password,
+ *     })
+ *
+ *     r = await ftp.checkFile('./_test_upload_client/DECL_20210805055044.csv')
+ *     console.log('ftp.checkFile', r)
+ *
+ *     r = await ftp.quit()
+ *     console.log('ftp.quit', r)
+ *
+ * }
+ * test()
+ *     .catch((err) => {
+ *         console.log(err)
+ *     })
+ */
+async function ftpCheckFile(fpRemote) {
+    return null
+}
+
+
+/**
+ * 下載伺服器指定檔案至本機
+ *
+ * @param {String} opt.fpRemote 輸入伺服器上指定檔案字串
+ * @param {String} opt.fpLocal 輸入本機指定檔案字串
+ * @param {Function} [opt.cbProcess=null] 輸入回調進度函數
+ * @return {Promise} 回傳Promise，resolve回傳成功訊息，reject回傳錯誤訊息
+ * @example
+ * import WFtp from './src/WFtp.mjs'
+ *
+ * async function test() {
+ *     let r
+ *
+ *     let ftp = WFtp()
+ *     // console.log('ftp', ftp)
+ *
+ *     await ftp.conn({
+ *         hostname: st.up.hostname,
+ *         port: st.up.port,
+ *         username: st.up.username,
+ *         password: st.up.password,
+ *     })
+ *
+ *     r = await ftp.download('./DECL_20210805055044.csv', './_test_download_client/DECL_20210805055044.csv', (p) => {
+ *         console.log('ftp.download p', p.name, p.progress)
+ *     })
+ *     console.log('ftp.download', r)
+ *
+ *     r = await ftp.quit()
+ *     console.log('ftp.quit', r)
+ *
+ * }
+ * test()
+ *     .catch((err) => {
+ *         console.log(err)
+ *     })
+ */
+async function ftpDownload(fpRemote, fpLocal, cbProcess = null) {
+    return null
+}
+
+
+/**
+ * 上傳本機指定檔案至伺服器
+ *
+ * @param {String} opt.fpLocal 輸入本機指定檔案字串
+ * @param {String} opt.fpRemote 輸入伺服器上指定檔案字串
+ * @param {Function} [opt.cbProcess=null] 輸入回調進度函數
+ * @return {Promise} 回傳Promise，resolve回傳成功訊息，reject回傳錯誤訊息
+ * @example
+ * import WFtp from './src/WFtp.mjs'
+ *
+ * async function test() {
+ *     let r
+ *
+ *     let ftp = WFtp()
+ *     // console.log('ftp', ftp)
+ *
+ *     await ftp.conn({
+ *         hostname: st.up.hostname,
+ *         port: st.up.port,
+ *         username: st.up.username,
+ *         password: st.up.password,
+ *     })
+ *
+ *     r = await ftp.upload('./_test_upload_client/DECL_20210805055044.csv', './DECL_20210805055044.csv', (p) => {
+ *         console.log('ftp.upload p', p.name, p.progress)
+ *     })
+ *     console.log('ftp.upload', r)
+ *
+ *     r = await ftp.quit()
+ *     console.log('ftp.quit', r)
+ *
+ * }
+ * test()
+ *     .catch((err) => {
+ *         console.log(err)
+ *     })
+ */
+async function ftpUpload(fpLocal, fpRemote, cbProcess) {
+    return null
+}
+
+
+/**
+ * 同步伺服器上指定資料夾內檔案至本機
+ *
+ * @param {String} opt.fdRemote 輸入伺服器上指定資料夾字串
+ * @param {String} opt.fdLocal 輸入本機指定資料夾字串
+ * @param {Function} [opt.cbProcess=null] 輸入回調進度函數
+ * @return {Promise} 回傳Promise，resolve回傳成功訊息，reject回傳錯誤訊息
+ * @example
+ * import WFtp from './src/WFtp.mjs'
+ *
+ * async function test() {
+ *     let r
+ *
+ *     let ftp = WFtp()
+ *     // console.log('ftp', ftp)
+ *
+ *     await ftp.conn({
+ *         hostname: st.up.hostname,
+ *         port: st.up.port,
+ *         username: st.up.username,
+ *         password: st.up.password,
+ *     })
+ *
+ *     r = await ftp.syncToLocal('.', './_test_download_client', (p) => {
+ *         console.log('ftp.syncToLocal p', p.name, p.progress)
+ *     })
+ *     console.log('ftp.syncToLocal', r)
+ *
+ *     r = await ftp.quit()
+ *     console.log('ftp.quit', r)
+ *
+ * }
+ * test()
+ *     .catch((err) => {
+ *         console.log(err)
+ *     })
+ */
+async function ftpSyncToLocal(fdRemote, fdLocal, cbProcess) {
+    return null
+}
+
+
+/**
+ * 同步本機指定資料夾內檔案至伺服器
+ *
+ * @param {String} opt.fdLocal 輸入本機指定資料夾字串
+ * @param {String} opt.fdRemote 輸入伺服器上指定資料夾字串
+ * @param {Function} [opt.cbProcess=null] 輸入回調進度函數
+ * @return {Promise} 回傳Promise，resolve回傳成功訊息，reject回傳錯誤訊息
+ * @example
+ * import WFtp from './src/WFtp.mjs'
+ *
+ * async function test() {
+ *     let r
+ *
+ *     let ftp = WFtp()
+ *     // console.log('ftp', ftp)
+ *
+ *     await ftp.conn({
+ *         hostname: st.up.hostname,
+ *         port: st.up.port,
+ *         username: st.up.username,
+ *         password: st.up.password,
+ *     })
+ *
+ *     r = await ftp.syncToRemote('./_test_upload_client', '.', (p) => {
+ *         console.log('ftp.syncToRemote p', p.name, p.progress)
+ *     })
+ *     console.log('ftp.syncToRemote', r)
+ *
+ *     r = await ftp.quit()
+ *     console.log('ftp.quit', r)
+ *
+ * }
+ * test()
+ *     .catch((err) => {
+ *         console.log(err)
+ *     })
+ */
+async function ftpSyncToRemote(fdLocal, fdRemote, cbProcess) {
+    return null
+}
+
+
+/**
+ * 操作FTP，包含連線、下載、資料夾內檔案同步下載、上傳、資料夾內檔案同步上傳等功能
+ *
+ * @returns {Object} 回傳FTP操作物件，包含conn、ls、stateFile、checkFile、download、syncToLocal、syncToRemote、upload、quit。
+ * @example
+ * import WFtp from './src/WFtp.mjs'
+ *
+ * async function test_up() {
+ *     let r
+ *
+ *     let ftp = WFtp()
+ *     // console.log('ftp', ftp)
+ *
+ *     await ftp.conn({
+ *         hostname: `{hostname}`,
+ *         port: `{port}`,
+ *         username: `{username}`,
+ *         password: `{password}`,
+ *     })
+ *
+ *     let fps = await ftp.ls('.')
+ *     console.log('ftp.ls', fps[0], fps.length)
+ *
+ *     r = await ftp.upload('./_test_upload_client/DECL_20210805055044.csv', './DECL_20210805055044.csv', (p) => {
+ *         console.log('ftp.upload p', p.name, p.progress)
+ *     })
+ *     console.log('ftp.upload', r)
+ *
+ *     r = await ftp.syncToRemote('./_test_upload_client', '.', (p) => {
+ *         console.log('ftp.syncToRemote p', p.name, p.progress)
+ *     })
+ *     console.log('ftp.syncToRemote', r)
+ *
+ *     r = await ftp.quit()
+ *     console.log('ftp.quit', r)
+ *
+ * }
+ * test_up()
+ *     .catch((err) => {
+ *         console.log(err)
+ *     })
+ * // ftp.ls {
+ * //   name: 'DECL_202108.csv',
+ * //   type: 0,
+ * //   time: 1658366760000,
+ * //   size: '218690',
+ * //   owner: 'ftp',
+ * //   group: 'ftp',
+ * //   userPermissions: { read: true, write: true, exec: false },
+ * //   groupPermissions: { read: true, write: true, exec: false },
+ * //   otherPermissions: { read: true, write: true, exec: false }
+ * // } 73
+ * // ftp.upload p DECL_20210805055044.csv 75.71339448693362
+ * // drain
+ * // ftp.upload p DECL_20210805055044.csv 100
+ * // ftp.upload ok
+ * // ftp.syncToRemote { num: 0, files: [] }
+ * // ftp.quit { code: 221, text: '221 Goodbye.', isMark: false, isError: false }
+ *
+ * async function test_dw() {
+ *     let r
+ *
+ *     let ftp = WFtp()
+ *     // console.log('ftp', ftp)
+ *
+ *     await ftp.conn({
+ *         hostname: `{hostname}`,
+ *         port: `{port}`,
+ *         username: `{username}`,
+ *         password: `{password}`,
+ *     })
+ *
+ *     let fps = await ftp.ls('.')
+ *     console.log('ftp.ls', fps[0], fps.length)
+ *
+ *     r = await ftp.download('./DECL_20210805055044.csv', './_test_download_client/DECL_20210805055044.csv', (p) => {
+ *         console.log('ftp.download p', p.name, p.progress)
+ *     })
+ *     console.log('ftp.download', r)
+ *
+ *     r = await ftp.syncToLocal('.', './_test_download_client', (p) => {
+ *         console.log('ftp.syncToLocal p', p.name, p.progress)
+ *     })
+ *     console.log('ftp.syncToLocal', r)
+ *
+ *     r = await ftp.quit()
+ *     console.log('ftp.quit', r)
+ *
+ * }
+ * test_dw()
+ *     .catch((err) => {
+ *         console.log(err)
+ *     })
+ * // ftp.ls {
+ * //   name: 'DECL_202108.csv',
+ * //   type: 0,
+ * //   time: 1658302140000,
+ * //   size: '218690',
+ * //   owner: 'ftp',
+ * //   group: 'ftp',
+ * //   userPermissions: { read: true, write: true, exec: false },
+ * //   groupPermissions: { read: true, write: true, exec: false },
+ * //   otherPermissions: { read: true, write: true, exec: false }
+ * // } 74
+ * // ftp.download p DECL_20210805055044.csv 4.7320871554333515
+ * // ftp.download p DECL_20210805055044.csv 9.464174310866703
+ * // ftp.download p DECL_20210805055044.csv 14.196261466300053
+ * // ftp.download p DECL_20210805055044.csv 18.928348621733406
+ * // ftp.download p DECL_20210805055044.csv 23.660435777166754
+ * // ftp.download p DECL_20210805055044.csv 28.392522932600105
+ * // ftp.download p DECL_20210805055044.csv 33.12461008803346
+ * // ftp.download p DECL_20210805055044.csv 37.85669724346681
+ * // ftp.download p DECL_20210805055044.csv 42.58878439890016
+ * // ftp.download p DECL_20210805055044.csv 47.32087155433351
+ * // ftp.download p DECL_20210805055044.csv 52.05295870976686
+ * // ftp.download p DECL_20210805055044.csv 56.78504586520021
+ * // ftp.download p DECL_20210805055044.csv 61.517133020633565
+ * // ftp.download p DECL_20210805055044.csv 66.24922017606691
+ * // ftp.download p DECL_20210805055044.csv 70.98130733150026
+ * // ftp.download p DECL_20210805055044.csv 75.71339448693362
+ * // ftp.download p DECL_20210805055044.csv 80.44548164236697
+ * // ftp.download p DECL_20210805055044.csv 85.17756879780032
+ * // ftp.download p DECL_20210805055044.csv 89.90965595323367
+ * // ftp.download p DECL_20210805055044.csv 94.64174310866701
+ * // ftp.download p DECL_20210805055044.csv 99.37383026410038
+ * // ftp.download p DECL_20210805055044.csv 100
+ * // ftp.download ok
+ * // ftp.syncToLocal { num: 0, files: [] }
+ * // ftp.quit { code: 221, text: '221 Goodbye.', isMark: false, isError: false }
+ *
+ */
 function WFtp() {
+    let t = this
+    t._ = {
+        doc_ftpConn: ftpConn,
+        doc_ftpLs: ftpLs,
+        doc_ftpQuit: ftpQuit,
+        doc_ftpStateFile: ftpStateFile,
+        doc_ftpCheckFile: ftpCheckFile,
+        doc_ftpDownload: ftpDownload,
+        doc_ftpUpload: ftpUpload,
+        doc_ftpSyncToLocal: ftpSyncToLocal,
+        doc_ftpSyncToRemote: ftpSyncToRemote,
+    }
 
     function WFtpCore() {
         let Ftp = null
@@ -154,7 +613,7 @@ function WFtp() {
 
             try {
                 Ftp = new Jsftp({
-                    host: hostname,
+                    host: hostname, //hostname or ip
                     port, // defaults to 21
                     user: username, // defaults to "anonymous"
                     pass: password, // defaults to "@anonymous"
@@ -169,7 +628,7 @@ function WFtp() {
         }
 
 
-        async function ftpLs(remoteFd = '.') {
+        async function ftpLs(fdRemote = '.') {
 
             //pm
             let pm = genPm()
@@ -180,7 +639,7 @@ function WFtp() {
                 return pm
             }
 
-            Ftp.ls(remoteFd, (err, res) => {
+            Ftp.ls(fdRemote, (err, res) => {
                 if (err) {
                     pm.reject(err)
                 }
@@ -249,7 +708,7 @@ function WFtp() {
         }
 
 
-        async function ftpDownload(fpRemote, fpLocal, cbProcess) {
+        async function ftpDownload(fpRemote, fpLocal, cbProcess = null) {
 
             //pm
             let pm = genPm()
@@ -652,7 +1111,7 @@ export default WFtp
 <br class="clear">
 
 <footer>
-    Documentation generated by <a href="https://github.com/jsdoc3/jsdoc">JSDoc 3.6.10</a> on Sat Jul 23 2022 13:04:38 GMT+0800 (台北標準時間) using the <a href="https://github.com/clenemt/docdash">docdash</a> theme.
+    Documentation generated by <a href="https://github.com/jsdoc3/jsdoc">JSDoc 3.6.10</a> on Sat Jul 23 2022 21:29:33 GMT+0800 (台北標準時間) using the <a href="https://github.com/clenemt/docdash">docdash</a> theme.
 </footer>
 
 <script>prettyPrint();</script>
