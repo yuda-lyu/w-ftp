@@ -582,7 +582,7 @@ Ftp.prototype.put = function(from, destination, callback) {
             // })
 
             socket.on('drain', () => {
-                console.log('drain')
+                // console.log('drain')
                 if (from.length > pointer + SLICE) {
                     newBuf = from.slice(pointer, pointer + SLICE)
                     pointer += SLICE
@@ -767,11 +767,14 @@ Ftp.prototype.getPasvSocket = function(callback = NOOP) {
  */
 Ftp.prototype.ls = function(filePath, callback) {
     function entriesToList(err, entries) {
+        // console.log('entriesToList', err, entries)
         if (err) {
             return callback(err)
         }
 
+        //ListingParser.parseFtpEntries是基於parse-listing解析, 但原始數據是ls而來, 本身就沒有到秒, 故只有類似dir提供的粗略時間, 無法像fs.statSync提供精確的產生與最新變更時間
         ListingParser.parseFtpEntries(entries.text || entries, (err, files) => {
+            // console.log('ListingParser.parseFtpEntries', err, files)
             if (err) {
                 return callback(err)
             }
@@ -790,6 +793,7 @@ Ftp.prototype.ls = function(filePath, callback) {
     }
     else {
         this.raw('stat', filePath, (err, data) => {
+            // console.log('filePath', filePath, data)
             // We might be connected to a server that doesn't support the
             // 'STAT' command, which is set as default. We use 'LIST' instead,
             // and we set the variable `useList` to true, to avoid extra round

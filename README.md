@@ -25,6 +25,7 @@ npm i w-ftp
 import path from 'path'
 import fs from 'fs'
 import WFtp from './src/WFtp.mjs'
+// import WFtp from './dist/w-ftp.umd.js'
 
 
 //st
@@ -41,24 +42,32 @@ async function test_dw() {
     // console.log('ftp', ftp)
 
     await ftp.conn({
-        hostname: `{hostname}`,
-        port: `{port}`,
-        username: `{username}`,
-        password: `{password}`,
+        hostname: st.dw.hostname,
+        port: st.dw.port,
+        username: st.dw.username,
+        password: st.dw.password,
     })
 
-    let fps = await ftp.ls('.')
-    console.log('ftp.ls', fps[0], fps.length)
+    async function core() {
 
-    r = await ftp.download('./DECL_20210805055044.csv', './_test_download_client/DECL_20210805055044.csv', (p) => {
-        console.log('ftp.download p', p.name, p.progress)
-    })
-    console.log('ftp.download', r)
+        let fps = await ftp.ls('.')
+        console.log('ftp.ls', fps[0], fps.length)
 
-    r = await ftp.syncToLocal('.', './_test_download_client', (p) => {
-        console.log('ftp.syncToLocal p', p.name, p.progress)
-    })
-    console.log('ftp.syncToLocal', r)
+        r = await ftp.download('./DECL_20210805055044.csv', './_test_download_client/DECL_20210805055044.csv', (p) => {
+            console.log('ftp.download p', p.name, p.progress)
+        })
+        console.log('ftp.download', r)
+
+        r = await ftp.syncToLocal('.', './_test_download_client', (p) => {
+            console.log('ftp.syncToLocal p', p.name, p.progress)
+        })
+        console.log('ftp.syncToLocal', r)
+
+    }
+    await core()
+        .catch((err) => {
+            console.log(err)
+        })
 
     r = await ftp.quit()
     console.log('ftp.quit', r)
@@ -79,6 +88,8 @@ test_dw()
 //   groupPermissions: { read: true, write: true, exec: false },
 //   otherPermissions: { read: true, write: true, exec: false }
 // } 74
+// ftp.isFile false
+// ftp.isFolder false
 // ftp.download p DECL_20210805055044.csv 4.7320871554333515
 // ftp.download p DECL_20210805055044.csv 9.464174310866703
 // ftp.download p DECL_20210805055044.csv 14.196261466300053
@@ -105,8 +116,6 @@ test_dw()
 // ftp.syncToLocal { num: 0, files: [] }
 // ftp.quit { code: 221, text: '221 Goodbye.', isMark: false, isError: false }
 
-//node --experimental-modules --es-module-specifier-resolution=node g-download.mjs
-
 ```
 
 #### Example for upload:
@@ -115,6 +124,7 @@ test_dw()
 import path from 'path'
 import fs from 'fs'
 import WFtp from './src/WFtp.mjs'
+// import WFtp from './dist/w-ftp.umd.js'
 
 
 //st
@@ -131,24 +141,32 @@ async function test_up() {
     // console.log('ftp', ftp)
 
     await ftp.conn({
-        hostname: `{hostname}`,
-        port: `{port}`,
-        username: `{username}`,
-        password: `{password}`,
+        hostname: st.up.hostname,
+        port: st.up.port,
+        username: st.up.username,
+        password: st.up.password,
     })
 
-    let fps = await ftp.ls('.')
-    console.log('ftp.ls', fps[0], fps.length)
+    async function core() {
 
-    r = await ftp.upload('./_test_upload_client/DECL_20210805055044.csv', './DECL_20210805055044.csv', (p) => {
-        console.log('ftp.upload p', p.name, p.progress)
-    })
-    console.log('ftp.upload', r)
+        let fps = await ftp.ls('.')
+        console.log('ftp.ls', fps[0], fps.length)
 
-    r = await ftp.syncToRemote('./_test_upload_client', '.', (p) => {
-        console.log('ftp.syncToRemote p', p.name, p.progress)
-    })
-    console.log('ftp.syncToRemote', r)
+        r = await ftp.upload('./_test_upload_client/DECL_20210805055044.csv', './DECL_20210805055044.csv', (p) => {
+            console.log('ftp.upload p', p.name, p.progress)
+        })
+        console.log('ftp.upload', r)
+
+        r = await ftp.syncToRemote('./_test_upload_client', '.', (p) => {
+            console.log('ftp.syncToRemote p', p.name, p.progress)
+        })
+        console.log('ftp.syncToRemote', r)
+
+    }
+    await core()
+        .catch((err) => {
+            console.log(err)
+        })
 
     r = await ftp.quit()
     console.log('ftp.quit', r)
@@ -169,13 +187,12 @@ test_up()
 //   groupPermissions: { read: true, write: true, exec: false },
 //   otherPermissions: { read: true, write: true, exec: false }
 // } 73
+// ftp.isFile false
+// ftp.isFolder false
 // ftp.upload p DECL_20210805055044.csv 75.71339448693362
-// drain
 // ftp.upload p DECL_20210805055044.csv 100
 // ftp.upload ok
 // ftp.syncToRemote { num: 0, files: [] }
 // ftp.quit { code: 221, text: '221 Goodbye.', isMark: false, isError: false }
-
-//node --experimental-modules --es-module-specifier-resolution=node g-upload.mjs
 
 ```

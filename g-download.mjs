@@ -24,18 +24,32 @@ async function test_dw() {
         password: st.dw.password,
     })
 
-    let fps = await ftp.ls('.')
-    console.log('ftp.ls', fps[0], fps.length)
+    async function core() {
 
-    r = await ftp.download('./DECL_20210805055044.csv', './_test_download_client/DECL_20210805055044.csv', (p) => {
-        console.log('ftp.download p', p.name, p.progress)
-    })
-    console.log('ftp.download', r)
+        let fps = await ftp.ls('.')
+        console.log('ftp.ls', fps[0], fps.length)
 
-    r = await ftp.syncToLocal('.', './_test_download_client', (p) => {
-        console.log('ftp.syncToLocal p', p.name, p.progress)
-    })
-    console.log('ftp.syncToLocal', r)
+        r = await ftp.isFile('./DECL_20210805055044.csv')
+        console.log('ftp.isFile', r)
+
+        r = await ftp.isFolder('./DECL_20210805055044.csv')
+        console.log('ftp.isFolder', r)
+
+        r = await ftp.download('./DECL_20210805055044.csv', './_test_download_client/DECL_20210805055044.csv', (p) => {
+            console.log('ftp.download p', p.name, p.progress)
+        })
+        console.log('ftp.download', r)
+
+        r = await ftp.syncToLocal('.', './_test_download_client', (p) => {
+            console.log('ftp.syncToLocal p', p.name, p.progress)
+        })
+        console.log('ftp.syncToLocal', r)
+
+    }
+    await core()
+        .catch((err) => {
+            console.log(err)
+        })
 
     r = await ftp.quit()
     console.log('ftp.quit', r)
@@ -56,6 +70,8 @@ test_dw()
 //   groupPermissions: { read: true, write: true, exec: false },
 //   otherPermissions: { read: true, write: true, exec: false }
 // } 74
+// ftp.isFile false
+// ftp.isFolder false
 // ftp.download p DECL_20210805055044.csv 4.7320871554333515
 // ftp.download p DECL_20210805055044.csv 9.464174310866703
 // ftp.download p DECL_20210805055044.csv 14.196261466300053
