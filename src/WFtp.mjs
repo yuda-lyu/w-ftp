@@ -665,7 +665,7 @@ function WFtp() {
 
             //timeLimit
             let t = setTimeout(() => {
-                pm.reject(`timeout[${timeLimit}]`)
+                pm.reject(`ftpLs timeout[${timeLimit}]`)
             }, timeLimit)
 
             Ftp.ls(fdRemote, (err, res) => {
@@ -711,7 +711,7 @@ function WFtp() {
                 //clear
                 Ftp = null
 
-                pm.reject(`timeout[${timeLimit}]`)
+                pm.reject(`ftpQuit timeout[${timeLimit}]`)
             }, timeLimit)
 
             Ftp.raw('quit', (err, res) => {
@@ -876,7 +876,7 @@ function WFtp() {
 
             //timeLimit
             let t = setTimeout(() => {
-                pm.reject(`timeout[${timeLimit}]`)
+                pm.reject(`ftpDownload timeout[${timeLimit}]`)
             }, timeLimit)
 
             Ftp.get(fpRemote, (err, socket) => {
@@ -996,7 +996,7 @@ function WFtp() {
 
             //timeLimit
             let t = setTimeout(() => {
-                pm.reject(`timeout[${timeLimit}]`)
+                pm.reject(`ftpUpload timeout[${timeLimit}]`)
             }, timeLimit)
 
             let dss = 0
