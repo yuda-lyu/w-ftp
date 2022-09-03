@@ -585,6 +585,7 @@ function WFtp() {
 
     function WFtpCore() {
         let Ftp = null
+        let timeLimit = 1 * 60 * 1000 //1hr
 
 
         async function ftpConn(opt = {}) {
@@ -621,6 +622,18 @@ function WFtp() {
                 return pm
             }
 
+            //timeLimit
+            let _timeLimit = get(opt, 'timeLimit')
+            if (isnum(_timeLimit)) {
+
+                //cint
+                _timeLimit = cint(_timeLimit)
+
+                //update
+                timeLimit = _timeLimit
+
+            }
+
             try {
                 Ftp = new Jsftp({
                     host: hostname, //hostname or ip
@@ -650,7 +663,16 @@ function WFtp() {
                 return pm
             }
 
+            //timeLimit
+            let t = setTimeout(() => {
+                pm.reject(`timeout[${timeLimit}]`)
+            }, timeLimit)
+
             Ftp.ls(fdRemote, (err, res) => {
+
+                //clearTimeout
+                clearTimeout(t)
+
                 if (err) {
                     pm.reject(err)
                 }
@@ -680,7 +702,29 @@ function WFtp() {
                 return pm
             }
 
+            //timeLimit
+            let t = setTimeout(() => {
+
+                //destroy
+                Ftp.destroy()
+
+                //clear
+                Ftp = null
+
+                pm.reject(`timeout[${timeLimit}]`)
+            }, timeLimit)
+
             Ftp.raw('quit', (err, res) => {
+
+                //clearTimeout
+                clearTimeout(t)
+
+                //destroy
+                Ftp.destroy()
+
+                //clear
+                Ftp = null
+
                 if (err) {
                     pm.reject(err)
                 }
@@ -830,10 +874,19 @@ function WFtp() {
             fileSize = cint(fileSize)
             // console.log('fileSize', fileSize)
 
+            //timeLimit
+            let t = setTimeout(() => {
+                pm.reject(`timeout[${timeLimit}]`)
+            }, timeLimit)
+
             Ftp.get(fpRemote, (err, socket) => {
 
                 //check
                 if (err) {
+
+                    //clearTimeout
+                    clearTimeout(t)
+
                     pm.reject(err)
                 }
 
@@ -871,6 +924,10 @@ function WFtp() {
 
                 //on close
                 socket.on('close', (err) => {
+
+                    //clearTimeout
+                    clearTimeout(t)
+
                     if (err) {
                         pm.reject(err)
                     }
@@ -937,18 +994,31 @@ function WFtp() {
             // //createReadStream
             // let reader = fs.createReadStream(fpLocal)
 
+            //timeLimit
+            let t = setTimeout(() => {
+                pm.reject(`timeout[${timeLimit}]`)
+            }, timeLimit)
+
             let dss = 0
             Ftp.put(bufferLocal, fpRemote, (err, buffer) => {
                 // console.log('Ftp.put', err, buffer)
 
                 //check
                 if (err) {
+
+                    //clearTimeout
+                    clearTimeout(t)
+
                     pm.reject(err)
                     return
                 }
 
                 //check
                 if (size(buffer) === 0) {
+
+                    //clearTimeout
+                    clearTimeout(t)
+
                     pm.resolve('ok')
                     return
                 }
