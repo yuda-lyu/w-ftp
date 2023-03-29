@@ -14,6 +14,7 @@
     <link type="text/css" rel="stylesheet" href="styles/prettify.css">
     <link type="text/css" rel="stylesheet" href="styles/jsdoc.css">
     <script src="scripts/nav.js" defer></script>
+    
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
 </head>
 <body>
@@ -27,7 +28,9 @@
 
 <nav >
     
-    <h2><a href="index.html">Home</a></h2><h3>Global</h3><ul><li><a href="global.html#conn">conn</a></li><li><a href="global.html#download">download</a></li><li><a href="global.html#isFile">isFile</a></li><li><a href="global.html#isFolder">isFolder</a></li><li><a href="global.html#ls">ls</a></li><li><a href="global.html#quit">quit</a></li><li><a href="global.html#stateFile">stateFile</a></li><li><a href="global.html#syncToLocal">syncToLocal</a></li><li><a href="global.html#syncToRemote">syncToRemote</a></li><li><a href="global.html#upload">upload</a></li><li><a href="global.html#WFtp">WFtp</a></li></ul>
+    
+    <h2><a href="index.html">Home</a></h2><h3>Global</h3><ul><li><a href="global.html#WFtp">WFtp</a></li><li><a href="global.html#conn">conn</a></li><li><a href="global.html#download">download</a></li><li><a href="global.html#isFile">isFile</a></li><li><a href="global.html#isFolder">isFolder</a></li><li><a href="global.html#ls">ls</a></li><li><a href="global.html#quit">quit</a></li><li><a href="global.html#stateFile">stateFile</a></li><li><a href="global.html#syncToLocal">syncToLocal</a></li><li><a href="global.html#syncToRemote">syncToRemote</a></li><li><a href="global.html#upload">upload</a></li></ul>
+    
 </nav>
 
 <div id="main">
@@ -46,6 +49,8 @@
     
         <h2>
         
+            
+        
         </h2>
         
     
@@ -58,6 +63,7 @@
             
 
 <dl class="details">
+    
 
     
 
@@ -124,7 +130,7 @@
 
     
 
-    <h4 class="name" id="conn"><span class="type-signature">(async) </span>conn<span class="signature">(opt<span class="signature-attributes">opt</span>)</span><span class="type-signature"> &rarr; {Promise}</span></h4>
+    <h4 class="name" id="WFtp"><span class="type-signature"></span>WFtp<span class="signature">()</span><span class="type-signature"> &rarr; {Object}</span></h4>
 
     
 
@@ -132,6 +138,123 @@
 
 
 <dl class="details">
+    
+    <dt class="tag-description">Description:</dt>
+    <dd class="tag-description"><ul class="dummy"><li><p>操作FTP，包含連線、下載、資料夾內檔案同步下載、上傳、資料夾內檔案同步上傳等功能</p></li></ul></dd>
+    
+
+    
+    <dt class="tag-source">Source:</dt>
+    <dd class="tag-source"><ul class="dummy"><li>
+        <a href="WFtp.mjs.html">WFtp.mjs</a>, <a href="WFtp.mjs.html#line572">line 572</a>
+    </li></ul></dd>
+    
+
+    
+
+    
+
+    
+
+    
+
+    
+
+    
+
+    
+
+    
+
+    
+
+    
+
+    
+
+    
+
+    
+
+    
+
+    
+</dl>
+
+
+
+
+
+
+
+
+
+
+
+    <h5 class="h5-examples">Example</h5>
+    
+    <pre class="prettyprint"><code>import WFtp from './src/WFtp.mjs'async function test_dw() {    let r    let ftp = WFtp()    // console.log('ftp', ftp)    await ftp.conn({        hostname: `{hostname}`,        port: `{port}`,        username: `{username}`,        password: `{password}`,    })    async function core() {        let fps = await ftp.ls('.')        console.log('ftp.ls', fps[0], fps.length)        r = await ftp.download('./DECL_20210805055044.csv', './_test_download_client/DECL_20210805055044.csv', (p) => {            console.log('ftp.download p', p.name, p.progress)        })        console.log('ftp.download', r)        r = await ftp.syncToLocal('.', './_test_download_client', (p) => {            console.log('ftp.syncToLocal p', p.name, p.progress)        })        console.log('ftp.syncToLocal', r)    }    await core()        .catch((err) => {            console.log(err)        })    r = await ftp.quit()    console.log('ftp.quit', r)}test_dw()    .catch((err) => {        console.log(err)    })// ftp.ls {//   name: 'DECL_202108.csv',//   type: 0,//   time: 1658302140000,//   size: '218690',//   owner: 'ftp',//   group: 'ftp',//   userPermissions: { read: true, write: true, exec: false },//   groupPermissions: { read: true, write: true, exec: false },//   otherPermissions: { read: true, write: true, exec: false }// } 74// ftp.download p DECL_20210805055044.csv 4.7320871554333515// ftp.download p DECL_20210805055044.csv 9.464174310866703// ftp.download p DECL_20210805055044.csv 14.196261466300053// ftp.download p DECL_20210805055044.csv 18.928348621733406// ftp.download p DECL_20210805055044.csv 23.660435777166754// ftp.download p DECL_20210805055044.csv 28.392522932600105// ftp.download p DECL_20210805055044.csv 33.12461008803346// ftp.download p DECL_20210805055044.csv 37.85669724346681// ftp.download p DECL_20210805055044.csv 42.58878439890016// ftp.download p DECL_20210805055044.csv 47.32087155433351// ftp.download p DECL_20210805055044.csv 52.05295870976686// ftp.download p DECL_20210805055044.csv 56.78504586520021// ftp.download p DECL_20210805055044.csv 61.517133020633565// ftp.download p DECL_20210805055044.csv 66.24922017606691// ftp.download p DECL_20210805055044.csv 70.98130733150026// ftp.download p DECL_20210805055044.csv 75.71339448693362// ftp.download p DECL_20210805055044.csv 80.44548164236697// ftp.download p DECL_20210805055044.csv 85.17756879780032// ftp.download p DECL_20210805055044.csv 89.90965595323367// ftp.download p DECL_20210805055044.csv 94.64174310866701// ftp.download p DECL_20210805055044.csv 99.37383026410038// ftp.download p DECL_20210805055044.csv 100// ftp.download ok// ftp.syncToLocal { num: 0, files: [] }// ftp.quit { code: 221, text: '221 Goodbye.', isMark: false, isError: false }async function test_up() {    let r    let ftp = WFtp()    // console.log('ftp', ftp)    await ftp.conn({        hostname: `{hostname}`,        port: `{port}`,        username: `{username}`,        password: `{password}`,    })    async function core() {        let fps = await ftp.ls('.')        console.log('ftp.ls', fps[0], fps.length)        r = await ftp.upload('./_test_upload_client/DECL_20210805055044.csv', './DECL_20210805055044.csv', (p) => {            console.log('ftp.upload p', p.name, p.progress)        })        console.log('ftp.upload', r)        r = await ftp.syncToRemote('./_test_upload_client', '.', (p) => {            console.log('ftp.syncToRemote p', p.name, p.progress)        })        console.log('ftp.syncToRemote', r)    }    await core()        .catch((err) => {            console.log(err)        })    r = await ftp.quit()    console.log('ftp.quit', r)}test_up()    .catch((err) => {        console.log(err)    })// ftp.ls {//   name: 'DECL_202108.csv',//   type: 0,//   time: 1658366760000,//   size: '218690',//   owner: 'ftp',//   group: 'ftp',//   userPermissions: { read: true, write: true, exec: false },//   groupPermissions: { read: true, write: true, exec: false },//   otherPermissions: { read: true, write: true, exec: false }// } 73// ftp.upload p DECL_20210805055044.csv 75.71339448693362// ftp.upload p DECL_20210805055044.csv 100// ftp.upload ok// ftp.syncToRemote { num: 0, files: [] }// ftp.quit { code: 221, text: '221 Goodbye.', isMark: false, isError: false }</code></pre>
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+<h5 class="h5-returns">Returns:</h5>
+
+        
+<div class="param-desc">
+    <p>回傳FTP操作物件，包含conn、ls、stateFile、isFile、download、syncToLocal、syncToRemote、upload、quit。</p>
+</div>
+
+
+
+<dl class="param-type">
+    <dt>
+        Type
+    </dt>
+    <dd>
+        
+<span class="param-type">Object</span>
+
+
+
+    </dd>
+</dl>
+
+    
+
+
+
+        
+            
+
+    
+
+    <h4 class="name" id="conn"><span class="type-signature type-signature-async">(async) </span>conn<span class="signature">(opt<span class="signature-attributes">opt</span>)</span><span class="type-signature"> &rarr; {Promise}</span></h4>
+
+    
+
+
+
+
+<dl class="details">
+    
+    <dt class="tag-description">Description:</dt>
+    <dd class="tag-description"><ul class="dummy"><li><p>連線至FPT伺服器</p></li></ul></dd>
+    
 
     
     <dt class="tag-source">Source:</dt>
@@ -175,26 +298,20 @@
 
 
 
-<div class="description usertext">
-    <p>連線至FPT伺服器</p>
-</div>
 
 
 
 
 
 
-
-
-
-    <h5>Example</h5>
+    <h5 class="h5-examples">Example</h5>
     
     <pre class="prettyprint"><code>import WFtp from './src/WFtp.mjs'async function test() {    let r    let ftp = WFtp()    // console.log('ftp', ftp)    await ftp.conn({        hostname: st.up.hostname,        port: st.up.port,        username: st.up.username,        password: st.up.password,    })    //actions    r = await ftp.quit()    console.log('ftp.quit', r)}test()    .catch((err) => {        console.log(err)    })</code></pre>
 
 
 
 
-    <h5>Parameters:</h5>
+    <h5 class="h5-parameters">Parameters:</h5>
     
 
 <table class="params">
@@ -230,6 +347,7 @@
             
                 
 <span class="param-type">Object</span>
+
 
 
             
@@ -292,6 +410,7 @@
 <span class="param-type">String</span>
 
 
+
             
             </td>
 
@@ -319,6 +438,7 @@
             
                 
 <span class="param-type">Number</span>
+
 
 
             
@@ -350,6 +470,7 @@
 <span class="param-type">String</span>
 
 
+
             
             </td>
 
@@ -377,6 +498,7 @@
             
                 
 <span class="param-type">String</span>
+
 
 
             
@@ -421,7 +543,7 @@
 
 
 
-<h5>Returns:</h5>
+<h5 class="h5-returns">Returns:</h5>
 
         
 <div class="param-desc">
@@ -439,6 +561,7 @@
 <span class="param-type">Promise</span>
 
 
+
     </dd>
 </dl>
 
@@ -451,7 +574,7 @@
 
     
 
-    <h4 class="name" id="download"><span class="type-signature">(async) </span>download<span class="signature">()</span><span class="type-signature"> &rarr; {Promise}</span></h4>
+    <h4 class="name" id="download"><span class="type-signature type-signature-async">(async) </span>download<span class="signature">()</span><span class="type-signature"> &rarr; {Promise}</span></h4>
 
     
 
@@ -459,6 +582,10 @@
 
 
 <dl class="details">
+    
+    <dt class="tag-description">Description:</dt>
+    <dd class="tag-description"><ul class="dummy"><li><p>下載伺服器指定檔案至本機</p></li></ul></dd>
+    
 
     
     <dt class="tag-source">Source:</dt>
@@ -502,26 +629,20 @@
 
 
 
-<div class="description usertext">
-    <p>下載伺服器指定檔案至本機</p>
-</div>
 
 
 
 
 
 
-
-
-
-    <h5>Example</h5>
+    <h5 class="h5-examples">Example</h5>
     
     <pre class="prettyprint"><code>import WFtp from './src/WFtp.mjs'async function test() {    let r    let ftp = WFtp()    // console.log('ftp', ftp)    await ftp.conn({        hostname: st.up.hostname,        port: st.up.port,        username: st.up.username,        password: st.up.password,    })    r = await ftp.download('./DECL_20210805055044.csv', './_test_download_client/DECL_20210805055044.csv', (p) => {        console.log('ftp.download p', p.name, p.progress)    })    console.log('ftp.download', r)    r = await ftp.quit()    console.log('ftp.quit', r)}test()    .catch((err) => {        console.log(err)    })</code></pre>
 
 
 
 
-    <h5>Parameters:</h5>
+    <h5 class="h5-parameters">Parameters:</h5>
     
 
 <table class="params">
@@ -559,6 +680,7 @@
 <span class="param-type">String</span>
 
 
+
             
             </td>
 
@@ -594,6 +716,7 @@
 <span class="param-type">String</span>
 
 
+
             
             </td>
 
@@ -627,6 +750,7 @@
             
                 
 <span class="param-type">function</span>
+
 
 
             
@@ -674,7 +798,7 @@
 
 
 
-<h5>Returns:</h5>
+<h5 class="h5-returns">Returns:</h5>
 
         
 <div class="param-desc">
@@ -692,6 +816,7 @@
 <span class="param-type">Promise</span>
 
 
+
     </dd>
 </dl>
 
@@ -704,7 +829,7 @@
 
     
 
-    <h4 class="name" id="isFile"><span class="type-signature">(async) </span>isFile<span class="signature">()</span><span class="type-signature"> &rarr; {Promise}</span></h4>
+    <h4 class="name" id="isFile"><span class="type-signature type-signature-async">(async) </span>isFile<span class="signature">()</span><span class="type-signature"> &rarr; {Promise}</span></h4>
 
     
 
@@ -712,6 +837,10 @@
 
 
 <dl class="details">
+    
+    <dt class="tag-description">Description:</dt>
+    <dd class="tag-description"><ul class="dummy"><li><p>確認伺服器指定檔案是否存在</p></li></ul></dd>
+    
 
     
     <dt class="tag-source">Source:</dt>
@@ -755,26 +884,20 @@
 
 
 
-<div class="description usertext">
-    <p>確認伺服器指定檔案是否存在</p>
-</div>
 
 
 
 
 
 
-
-
-
-    <h5>Example</h5>
+    <h5 class="h5-examples">Example</h5>
     
     <pre class="prettyprint"><code>import WFtp from './src/WFtp.mjs'async function test() {    let r    let ftp = WFtp()    // console.log('ftp', ftp)    await ftp.conn({        hostname: st.up.hostname,        port: st.up.port,        username: st.up.username,        password: st.up.password,    })    r = await ftp.isFile('./_test_upload_client/DECL_20210805055044.csv')    console.log('ftp.isFile', r)    r = await ftp.quit()    console.log('ftp.quit', r)}test()    .catch((err) => {        console.log(err)    })</code></pre>
 
 
 
 
-    <h5>Parameters:</h5>
+    <h5 class="h5-parameters">Parameters:</h5>
     
 
 <table class="params">
@@ -808,6 +931,7 @@
 <span class="param-type">String</span>
 
 
+
             
             </td>
 
@@ -837,7 +961,7 @@
 
 
 
-<h5>Returns:</h5>
+<h5 class="h5-returns">Returns:</h5>
 
         
 <div class="param-desc">
@@ -855,6 +979,7 @@
 <span class="param-type">Promise</span>
 
 
+
     </dd>
 </dl>
 
@@ -867,7 +992,7 @@
 
     
 
-    <h4 class="name" id="isFolder"><span class="type-signature">(async) </span>isFolder<span class="signature">()</span><span class="type-signature"> &rarr; {Promise}</span></h4>
+    <h4 class="name" id="isFolder"><span class="type-signature type-signature-async">(async) </span>isFolder<span class="signature">()</span><span class="type-signature"> &rarr; {Promise}</span></h4>
 
     
 
@@ -875,6 +1000,10 @@
 
 
 <dl class="details">
+    
+    <dt class="tag-description">Description:</dt>
+    <dd class="tag-description"><ul class="dummy"><li><p>確認伺服器指定資料夾是否存在</p></li></ul></dd>
+    
 
     
     <dt class="tag-source">Source:</dt>
@@ -918,26 +1047,20 @@
 
 
 
-<div class="description usertext">
-    <p>確認伺服器指定資料夾是否存在</p>
-</div>
 
 
 
 
 
 
-
-
-
-    <h5>Example</h5>
+    <h5 class="h5-examples">Example</h5>
     
     <pre class="prettyprint"><code>import WFtp from './src/WFtp.mjs'async function test() {    let r    let ftp = WFtp()    // console.log('ftp', ftp)    await ftp.conn({        hostname: st.up.hostname,        port: st.up.port,        username: st.up.username,        password: st.up.password,    })    r = await ftp.isFolder('./_test_upload_client')    console.log('ftp.isFolder', r)    r = await ftp.quit()    console.log('ftp.quit', r)}test()    .catch((err) => {        console.log(err)    })</code></pre>
 
 
 
 
-    <h5>Parameters:</h5>
+    <h5 class="h5-parameters">Parameters:</h5>
     
 
 <table class="params">
@@ -971,6 +1094,7 @@
 <span class="param-type">String</span>
 
 
+
             
             </td>
 
@@ -1000,7 +1124,7 @@
 
 
 
-<h5>Returns:</h5>
+<h5 class="h5-returns">Returns:</h5>
 
         
 <div class="param-desc">
@@ -1018,6 +1142,7 @@
 <span class="param-type">Promise</span>
 
 
+
     </dd>
 </dl>
 
@@ -1030,7 +1155,7 @@
 
     
 
-    <h4 class="name" id="ls"><span class="type-signature">(async) </span>ls<span class="signature">()</span><span class="type-signature"> &rarr; {Promise}</span></h4>
+    <h4 class="name" id="ls"><span class="type-signature type-signature-async">(async) </span>ls<span class="signature">()</span><span class="type-signature"> &rarr; {Promise}</span></h4>
 
     
 
@@ -1038,6 +1163,10 @@
 
 
 <dl class="details">
+    
+    <dt class="tag-description">Description:</dt>
+    <dd class="tag-description"><ul class="dummy"><li><p>遍歷伺服器上指定資料夾內檔案清單資訊</p></li></ul></dd>
+    
 
     
     <dt class="tag-source">Source:</dt>
@@ -1081,26 +1210,20 @@
 
 
 
-<div class="description usertext">
-    <p>遍歷伺服器上指定資料夾內檔案清單資訊</p>
-</div>
 
 
 
 
 
 
-
-
-
-    <h5>Example</h5>
+    <h5 class="h5-examples">Example</h5>
     
     <pre class="prettyprint"><code>import WFtp from './src/WFtp.mjs'async function test() {    let r    let ftp = WFtp()    // console.log('ftp', ftp)    await ftp.conn({        hostname: st.up.hostname,        port: st.up.port,        username: st.up.username,        password: st.up.password,    })    let fps = await ftp.ls('.')    console.log('ftp.ls', fps[0], fps.length)    r = await ftp.quit()    console.log('ftp.quit', r)}test()    .catch((err) => {        console.log(err)    })</code></pre>
 
 
 
 
-    <h5>Parameters:</h5>
+    <h5 class="h5-parameters">Parameters:</h5>
     
 
 <table class="params">
@@ -1134,6 +1257,7 @@
 <span class="param-type">String</span>
 
 
+
             
             </td>
 
@@ -1163,7 +1287,7 @@
 
 
 
-<h5>Returns:</h5>
+<h5 class="h5-returns">Returns:</h5>
 
         
 <div class="param-desc">
@@ -1181,6 +1305,7 @@
 <span class="param-type">Promise</span>
 
 
+
     </dd>
 </dl>
 
@@ -1193,7 +1318,7 @@
 
     
 
-    <h4 class="name" id="quit"><span class="type-signature">(async) </span>quit<span class="signature">()</span><span class="type-signature"> &rarr; {Promise}</span></h4>
+    <h4 class="name" id="quit"><span class="type-signature type-signature-async">(async) </span>quit<span class="signature">()</span><span class="type-signature"> &rarr; {Promise}</span></h4>
 
     
 
@@ -1201,6 +1326,10 @@
 
 
 <dl class="details">
+    
+    <dt class="tag-description">Description:</dt>
+    <dd class="tag-description"><ul class="dummy"><li><p>關閉與伺服器連線</p></li></ul></dd>
+    
 
     
     <dt class="tag-source">Source:</dt>
@@ -1244,19 +1373,13 @@
 
 
 
-<div class="description usertext">
-    <p>關閉與伺服器連線</p>
-</div>
 
 
 
 
 
 
-
-
-
-    <h5>Example</h5>
+    <h5 class="h5-examples">Example</h5>
     
     <pre class="prettyprint"><code>import WFtp from './src/WFtp.mjs'async function test() {    let r    let ftp = WFtp()    // console.log('ftp', ftp)    await ftp.conn({        hostname: st.up.hostname,        port: st.up.port,        username: st.up.username,        password: st.up.password,    })    //actions    r = await ftp.quit()    console.log('ftp.quit', r)}test()    .catch((err) => {        console.log(err)    })</code></pre>
 
@@ -1277,7 +1400,7 @@
 
 
 
-<h5>Returns:</h5>
+<h5 class="h5-returns">Returns:</h5>
 
         
 <div class="param-desc">
@@ -1295,6 +1418,7 @@
 <span class="param-type">Promise</span>
 
 
+
     </dd>
 </dl>
 
@@ -1307,7 +1431,7 @@
 
     
 
-    <h4 class="name" id="stateFile"><span class="type-signature">(async) </span>stateFile<span class="signature">()</span><span class="type-signature"> &rarr; {Promise}</span></h4>
+    <h4 class="name" id="stateFile"><span class="type-signature type-signature-async">(async) </span>stateFile<span class="signature">()</span><span class="type-signature"> &rarr; {Promise}</span></h4>
 
     
 
@@ -1315,6 +1439,10 @@
 
 
 <dl class="details">
+    
+    <dt class="tag-description">Description:</dt>
+    <dd class="tag-description"><ul class="dummy"><li><p>取得伺服器指定檔案資訊</p></li></ul></dd>
+    
 
     
     <dt class="tag-source">Source:</dt>
@@ -1358,26 +1486,20 @@
 
 
 
-<div class="description usertext">
-    <p>取得伺服器指定檔案資訊</p>
-</div>
 
 
 
 
 
 
-
-
-
-    <h5>Example</h5>
+    <h5 class="h5-examples">Example</h5>
     
     <pre class="prettyprint"><code>import WFtp from './src/WFtp.mjs'async function test() {    let r    let ftp = WFtp()    // console.log('ftp', ftp)    await ftp.conn({        hostname: st.up.hostname,        port: st.up.port,        username: st.up.username,        password: st.up.password,    })    r = await ftp.stateFile('./_test_upload_client/DECL_20210805055044.csv')    console.log('ftp.stateFile', r)    r = await ftp.quit()    console.log('ftp.quit', r)}test()    .catch((err) => {        console.log(err)    })</code></pre>
 
 
 
 
-    <h5>Parameters:</h5>
+    <h5 class="h5-parameters">Parameters:</h5>
     
 
 <table class="params">
@@ -1411,6 +1533,7 @@
 <span class="param-type">String</span>
 
 
+
             
             </td>
 
@@ -1440,7 +1563,7 @@
 
 
 
-<h5>Returns:</h5>
+<h5 class="h5-returns">Returns:</h5>
 
         
 <div class="param-desc">
@@ -1458,6 +1581,7 @@
 <span class="param-type">Promise</span>
 
 
+
     </dd>
 </dl>
 
@@ -1470,7 +1594,7 @@
 
     
 
-    <h4 class="name" id="syncToLocal"><span class="type-signature">(async) </span>syncToLocal<span class="signature">()</span><span class="type-signature"> &rarr; {Promise}</span></h4>
+    <h4 class="name" id="syncToLocal"><span class="type-signature type-signature-async">(async) </span>syncToLocal<span class="signature">()</span><span class="type-signature"> &rarr; {Promise}</span></h4>
 
     
 
@@ -1478,6 +1602,10 @@
 
 
 <dl class="details">
+    
+    <dt class="tag-description">Description:</dt>
+    <dd class="tag-description"><ul class="dummy"><li><p>同步伺服器上指定資料夾內檔案至本機</p></li></ul></dd>
+    
 
     
     <dt class="tag-source">Source:</dt>
@@ -1521,26 +1649,20 @@
 
 
 
-<div class="description usertext">
-    <p>同步伺服器上指定資料夾內檔案至本機</p>
-</div>
 
 
 
 
 
 
-
-
-
-    <h5>Example</h5>
+    <h5 class="h5-examples">Example</h5>
     
     <pre class="prettyprint"><code>import WFtp from './src/WFtp.mjs'async function test() {    let r    let ftp = WFtp()    // console.log('ftp', ftp)    await ftp.conn({        hostname: st.up.hostname,        port: st.up.port,        username: st.up.username,        password: st.up.password,    })    r = await ftp.syncToLocal('.', './_test_download_client', (p) => {        console.log('ftp.syncToLocal p', p.name, p.progress)    })    console.log('ftp.syncToLocal', r)    r = await ftp.quit()    console.log('ftp.quit', r)}test()    .catch((err) => {        console.log(err)    })</code></pre>
 
 
 
 
-    <h5>Parameters:</h5>
+    <h5 class="h5-parameters">Parameters:</h5>
     
 
 <table class="params">
@@ -1578,6 +1700,7 @@
 <span class="param-type">String</span>
 
 
+
             
             </td>
 
@@ -1613,6 +1736,7 @@
 <span class="param-type">String</span>
 
 
+
             
             </td>
 
@@ -1646,6 +1770,7 @@
             
                 
 <span class="param-type">function</span>
+
 
 
             
@@ -1693,7 +1818,7 @@
 
 
 
-<h5>Returns:</h5>
+<h5 class="h5-returns">Returns:</h5>
 
         
 <div class="param-desc">
@@ -1711,6 +1836,7 @@
 <span class="param-type">Promise</span>
 
 
+
     </dd>
 </dl>
 
@@ -1723,7 +1849,7 @@
 
     
 
-    <h4 class="name" id="syncToRemote"><span class="type-signature">(async) </span>syncToRemote<span class="signature">()</span><span class="type-signature"> &rarr; {Promise}</span></h4>
+    <h4 class="name" id="syncToRemote"><span class="type-signature type-signature-async">(async) </span>syncToRemote<span class="signature">()</span><span class="type-signature"> &rarr; {Promise}</span></h4>
 
     
 
@@ -1731,6 +1857,10 @@
 
 
 <dl class="details">
+    
+    <dt class="tag-description">Description:</dt>
+    <dd class="tag-description"><ul class="dummy"><li><p>同步本機指定資料夾內檔案至伺服器</p></li></ul></dd>
+    
 
     
     <dt class="tag-source">Source:</dt>
@@ -1774,26 +1904,20 @@
 
 
 
-<div class="description usertext">
-    <p>同步本機指定資料夾內檔案至伺服器</p>
-</div>
 
 
 
 
 
 
-
-
-
-    <h5>Example</h5>
+    <h5 class="h5-examples">Example</h5>
     
     <pre class="prettyprint"><code>import WFtp from './src/WFtp.mjs'async function test() {    let r    let ftp = WFtp()    // console.log('ftp', ftp)    await ftp.conn({        hostname: st.up.hostname,        port: st.up.port,        username: st.up.username,        password: st.up.password,    })    r = await ftp.syncToRemote('./_test_upload_client', '.', (p) => {        console.log('ftp.syncToRemote p', p.name, p.progress)    })    console.log('ftp.syncToRemote', r)    r = await ftp.quit()    console.log('ftp.quit', r)}test()    .catch((err) => {        console.log(err)    })</code></pre>
 
 
 
 
-    <h5>Parameters:</h5>
+    <h5 class="h5-parameters">Parameters:</h5>
     
 
 <table class="params">
@@ -1831,6 +1955,7 @@
 <span class="param-type">String</span>
 
 
+
             
             </td>
 
@@ -1866,6 +1991,7 @@
 <span class="param-type">String</span>
 
 
+
             
             </td>
 
@@ -1899,6 +2025,7 @@
             
                 
 <span class="param-type">function</span>
+
 
 
             
@@ -1946,7 +2073,7 @@
 
 
 
-<h5>Returns:</h5>
+<h5 class="h5-returns">Returns:</h5>
 
         
 <div class="param-desc">
@@ -1964,6 +2091,7 @@
 <span class="param-type">Promise</span>
 
 
+
     </dd>
 </dl>
 
@@ -1976,7 +2104,7 @@
 
     
 
-    <h4 class="name" id="upload"><span class="type-signature">(async) </span>upload<span class="signature">()</span><span class="type-signature"> &rarr; {Promise}</span></h4>
+    <h4 class="name" id="upload"><span class="type-signature type-signature-async">(async) </span>upload<span class="signature">()</span><span class="type-signature"> &rarr; {Promise}</span></h4>
 
     
 
@@ -1984,6 +2112,10 @@
 
 
 <dl class="details">
+    
+    <dt class="tag-description">Description:</dt>
+    <dd class="tag-description"><ul class="dummy"><li><p>上傳本機指定檔案至伺服器</p></li></ul></dd>
+    
 
     
     <dt class="tag-source">Source:</dt>
@@ -2027,26 +2159,20 @@
 
 
 
-<div class="description usertext">
-    <p>上傳本機指定檔案至伺服器</p>
-</div>
 
 
 
 
 
 
-
-
-
-    <h5>Example</h5>
+    <h5 class="h5-examples">Example</h5>
     
     <pre class="prettyprint"><code>import WFtp from './src/WFtp.mjs'async function test() {    let r    let ftp = WFtp()    // console.log('ftp', ftp)    await ftp.conn({        hostname: st.up.hostname,        port: st.up.port,        username: st.up.username,        password: st.up.password,    })    r = await ftp.upload('./_test_upload_client/DECL_20210805055044.csv', './DECL_20210805055044.csv', (p) => {        console.log('ftp.upload p', p.name, p.progress)    })    console.log('ftp.upload', r)    r = await ftp.quit()    console.log('ftp.quit', r)}test()    .catch((err) => {        console.log(err)    })</code></pre>
 
 
 
 
-    <h5>Parameters:</h5>
+    <h5 class="h5-parameters">Parameters:</h5>
     
 
 <table class="params">
@@ -2084,6 +2210,7 @@
 <span class="param-type">String</span>
 
 
+
             
             </td>
 
@@ -2119,6 +2246,7 @@
 <span class="param-type">String</span>
 
 
+
             
             </td>
 
@@ -2152,6 +2280,7 @@
             
                 
 <span class="param-type">function</span>
+
 
 
             
@@ -2199,7 +2328,7 @@
 
 
 
-<h5>Returns:</h5>
+<h5 class="h5-returns">Returns:</h5>
 
         
 <div class="param-desc">
@@ -2216,119 +2345,6 @@
         
 <span class="param-type">Promise</span>
 
-
-    </dd>
-</dl>
-
-    
-
-
-
-        
-            
-
-    
-
-    <h4 class="name" id="WFtp"><span class="type-signature"></span>WFtp<span class="signature">()</span><span class="type-signature"> &rarr; {Object}</span></h4>
-
-    
-
-
-
-
-<dl class="details">
-
-    
-    <dt class="tag-source">Source:</dt>
-    <dd class="tag-source"><ul class="dummy"><li>
-        <a href="WFtp.mjs.html">WFtp.mjs</a>, <a href="WFtp.mjs.html#line572">line 572</a>
-    </li></ul></dd>
-    
-
-    
-
-    
-
-    
-
-    
-
-    
-
-    
-
-    
-
-    
-
-    
-
-    
-
-    
-
-    
-
-    
-
-    
-
-    
-</dl>
-
-
-
-
-
-<div class="description usertext">
-    <p>操作FTP，包含連線、下載、資料夾內檔案同步下載、上傳、資料夾內檔案同步上傳等功能</p>
-</div>
-
-
-
-
-
-
-
-
-
-    <h5>Example</h5>
-    
-    <pre class="prettyprint"><code>import WFtp from './src/WFtp.mjs'async function test_dw() {    let r    let ftp = WFtp()    // console.log('ftp', ftp)    await ftp.conn({        hostname: `{hostname}`,        port: `{port}`,        username: `{username}`,        password: `{password}`,    })    async function core() {        let fps = await ftp.ls('.')        console.log('ftp.ls', fps[0], fps.length)        r = await ftp.download('./DECL_20210805055044.csv', './_test_download_client/DECL_20210805055044.csv', (p) => {            console.log('ftp.download p', p.name, p.progress)        })        console.log('ftp.download', r)        r = await ftp.syncToLocal('.', './_test_download_client', (p) => {            console.log('ftp.syncToLocal p', p.name, p.progress)        })        console.log('ftp.syncToLocal', r)    }    await core()        .catch((err) => {            console.log(err)        })    r = await ftp.quit()    console.log('ftp.quit', r)}test_dw()    .catch((err) => {        console.log(err)    })// ftp.ls {//   name: 'DECL_202108.csv',//   type: 0,//   time: 1658302140000,//   size: '218690',//   owner: 'ftp',//   group: 'ftp',//   userPermissions: { read: true, write: true, exec: false },//   groupPermissions: { read: true, write: true, exec: false },//   otherPermissions: { read: true, write: true, exec: false }// } 74// ftp.download p DECL_20210805055044.csv 4.7320871554333515// ftp.download p DECL_20210805055044.csv 9.464174310866703// ftp.download p DECL_20210805055044.csv 14.196261466300053// ftp.download p DECL_20210805055044.csv 18.928348621733406// ftp.download p DECL_20210805055044.csv 23.660435777166754// ftp.download p DECL_20210805055044.csv 28.392522932600105// ftp.download p DECL_20210805055044.csv 33.12461008803346// ftp.download p DECL_20210805055044.csv 37.85669724346681// ftp.download p DECL_20210805055044.csv 42.58878439890016// ftp.download p DECL_20210805055044.csv 47.32087155433351// ftp.download p DECL_20210805055044.csv 52.05295870976686// ftp.download p DECL_20210805055044.csv 56.78504586520021// ftp.download p DECL_20210805055044.csv 61.517133020633565// ftp.download p DECL_20210805055044.csv 66.24922017606691// ftp.download p DECL_20210805055044.csv 70.98130733150026// ftp.download p DECL_20210805055044.csv 75.71339448693362// ftp.download p DECL_20210805055044.csv 80.44548164236697// ftp.download p DECL_20210805055044.csv 85.17756879780032// ftp.download p DECL_20210805055044.csv 89.90965595323367// ftp.download p DECL_20210805055044.csv 94.64174310866701// ftp.download p DECL_20210805055044.csv 99.37383026410038// ftp.download p DECL_20210805055044.csv 100// ftp.download ok// ftp.syncToLocal { num: 0, files: [] }// ftp.quit { code: 221, text: '221 Goodbye.', isMark: false, isError: false }async function test_up() {    let r    let ftp = WFtp()    // console.log('ftp', ftp)    await ftp.conn({        hostname: `{hostname}`,        port: `{port}`,        username: `{username}`,        password: `{password}`,    })    async function core() {        let fps = await ftp.ls('.')        console.log('ftp.ls', fps[0], fps.length)        r = await ftp.upload('./_test_upload_client/DECL_20210805055044.csv', './DECL_20210805055044.csv', (p) => {            console.log('ftp.upload p', p.name, p.progress)        })        console.log('ftp.upload', r)        r = await ftp.syncToRemote('./_test_upload_client', '.', (p) => {            console.log('ftp.syncToRemote p', p.name, p.progress)        })        console.log('ftp.syncToRemote', r)    }    await core()        .catch((err) => {            console.log(err)        })    r = await ftp.quit()    console.log('ftp.quit', r)}test_up()    .catch((err) => {        console.log(err)    })// ftp.ls {//   name: 'DECL_202108.csv',//   type: 0,//   time: 1658366760000,//   size: '218690',//   owner: 'ftp',//   group: 'ftp',//   userPermissions: { read: true, write: true, exec: false },//   groupPermissions: { read: true, write: true, exec: false },//   otherPermissions: { read: true, write: true, exec: false }// } 73// ftp.upload p DECL_20210805055044.csv 75.71339448693362// ftp.upload p DECL_20210805055044.csv 100// ftp.upload ok// ftp.syncToRemote { num: 0, files: [] }// ftp.quit { code: 221, text: '221 Goodbye.', isMark: false, isError: false }</code></pre>
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-<h5>Returns:</h5>
-
-        
-<div class="param-desc">
-    <p>回傳FTP操作物件，包含conn、ls、stateFile、isFile、download、syncToLocal、syncToRemote、upload、quit。</p>
-</div>
-
-
-
-<dl class="param-type">
-    <dt>
-        Type
-    </dt>
-    <dd>
-        
-<span class="param-type">Object</span>
 
 
     </dd>
@@ -2358,7 +2374,7 @@
 <br class="clear">
 
 <footer>
-    Documentation generated by <a href="https://github.com/jsdoc3/jsdoc">JSDoc 3.6.10</a> on Thu Jan 19 2023 12:20:00 GMT+0800 (台北標準時間) using the <a href="https://github.com/clenemt/docdash">docdash</a> theme.
+    Documentation generated by <a href="https://github.com/jsdoc3/jsdoc">JSDoc 4.0.2</a> on Wed Mar 29 2023 12:23:37 GMT+0800 (台北標準時間) using the <a href="https://github.com/clenemt/docdash">docdash</a> theme.
 </footer>
 
 <script>prettyPrint();</script>
