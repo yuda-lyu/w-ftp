@@ -1,0 +1,24 @@
+import each from 'lodash/each'
+import dropRight from 'lodash/dropRight'
+import sep from 'wsemi/src/sep.mjs'
+import strleft from 'wsemi/src/strleft.mjs'
+import strdelleft from 'wsemi/src/strdelleft.mjs'
+
+
+function sepTreeFolders(p) {
+    if (strleft(p, 1) === '.') {
+        p = strdelleft(p, 1)
+    }
+    let ss = sep(p, '/')
+    ss = dropRight(ss) //去除檔案
+    let rs = []
+    let fd = '.'
+    each(ss, (v) => {
+        fd += '/' + v
+        rs.push(fd)
+    })
+    return rs
+}
+
+
+export default sepTreeFolders

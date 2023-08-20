@@ -454,7 +454,7 @@ Ftp.prototype.get = function(remotePath, localPath, callback = NOOP) {
                 this.emitProgress({
                     filename: remotePath,
                     action: 'get',
-                    socket: socket
+                    socket
                 })
             })
 
@@ -793,7 +793,7 @@ Ftp.prototype.ls = function(filePath, callback) {
     }
     else {
         this.raw('stat', filePath, (err, data) => {
-            // console.log('filePath', filePath, data)
+            // console.log('raw stat filePath', filePath, data)
             // We might be connected to a server that doesn't support the
             // 'STAT' command, which is set as default. We use 'LIST' instead,
             // and we set the variable `useList` to true, to avoid extra round

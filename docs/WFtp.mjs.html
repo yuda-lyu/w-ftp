@@ -29,7 +29,7 @@
 <nav >
     
     
-    <h2><a href="index.html">Home</a></h2><h3>Global</h3><ul><li><a href="global.html#WFtp">WFtp</a></li><li><a href="global.html#conn">conn</a></li><li><a href="global.html#download">download</a></li><li><a href="global.html#isFile">isFile</a></li><li><a href="global.html#isFolder">isFolder</a></li><li><a href="global.html#ls">ls</a></li><li><a href="global.html#quit">quit</a></li><li><a href="global.html#stateFile">stateFile</a></li><li><a href="global.html#syncToLocal">syncToLocal</a></li><li><a href="global.html#syncToRemote">syncToRemote</a></li><li><a href="global.html#upload">upload</a></li></ul>
+    <h2><a href="index.html">Home</a></h2><h3>Global</h3><ul><li><a href="global.html#WFtp">WFtp</a></li><li><a href="global.html#conn">conn</a></li><li><a href="global.html#cwd">cwd</a></li><li><a href="global.html#download">download</a></li><li><a href="global.html#isFile">isFile</a></li><li><a href="global.html#isFolder">isFolder</a></li><li><a href="global.html#ls">ls</a></li><li><a href="global.html#mkdir">mkdir</a></li><li><a href="global.html#pwd">pwd</a></li><li><a href="global.html#quit">quit</a></li><li><a href="global.html#stat">stat</a></li><li><a href="global.html#syncToLocal">syncToLocal</a></li><li><a href="global.html#syncToRemote">syncToRemote</a></li><li><a href="global.html#upload">upload</a></li></ul>
     
 </nav>
 
@@ -45,40 +45,14 @@
     
     <section>
         <article>
-            <pre class="prettyprint source linenums"><code>import path from 'path'
-import fs from 'fs'
-import get from 'lodash/get'
-import size from 'lodash/size'
-import filter from 'lodash/filter'
-import find from 'lodash/find'
-import map from 'lodash/map'
-import genPm from 'wsemi/src/genPm.mjs'
-import cint from 'wsemi/src/cint.mjs'
-import cstr from 'wsemi/src/cstr.mjs'
-import ispint from 'wsemi/src/ispint.mjs'
-import isestr from 'wsemi/src/isestr.mjs'
-import iseobj from 'wsemi/src/iseobj.mjs'
-import isfun from 'wsemi/src/isfun.mjs'
-import isnum from 'wsemi/src/isnum.mjs'
-import strleft from 'wsemi/src/strleft.mjs'
-import pmSeries from 'wsemi/src/pmSeries.mjs'
-import getFileName from 'wsemi/src/getFileName.mjs'
-import fsTreeFolder from 'wsemi/src/fsTreeFolder.mjs'
-import fsIsFolder from 'wsemi/src/fsIsFolder.mjs'
-import fsIsFile from 'wsemi/src/fsIsFile.mjs'
-import fsCreateFolder from 'wsemi/src/fsCreateFolder.mjs'
-import ot from 'dayjs'
-import Jsftp from './jsftp.js'
+            <pre class="prettyprint source linenums"><code>import get from 'lodash/get'
+import CoreFTP from './CoreFTP.mjs'
+import CoreSFTP from './CoreSFTP.mjs'
 
 
 /**
  * 連線至FPT伺服器
  *
- * @param {Object} [opt={}] 輸入設定物件，預設{}
- * @param {String} opt.hostname='' 輸入hostname字串
- * @param {Number} opt.port='' 輸入port正整數
- * @param {String} opt.username='' 輸入帳號字串
- * @param {String} opt.password='' 輸入密碼字串
  * @return {Promise} 回傳Promise，resolve回傳成功訊息，reject回傳錯誤訊息
  * @example
  * import WFtp from './src/WFtp.mjs'
@@ -86,15 +60,16 @@ import Jsftp from './jsftp.js'
  * async function test() {
  *     let r
  *
- *     let ftp = WFtp()
+ *     let ftp = WFtp({
+ *         transportation: 'FTP', //'FTP', 'SFTP'
+ *         hostname: st.hostname,
+ *         port: st.port,
+ *         username: st.username,
+ *         password: st.password,
+ *     })
  *     // console.log('ftp', ftp)
  *
- *     await ftp.conn({
- *         hostname: st.up.hostname,
- *         port: st.up.port,
- *         username: st.up.username,
- *         password: st.up.password,
- *     })
+ *     await ftp.conn()
  *
  *     //actions
  *
@@ -108,7 +83,44 @@ import Jsftp from './jsftp.js'
  *     })
  *
  */
-async function conn(opt = {}) {
+async function conn() {
+    return null
+}
+
+
+/**
+ * 關閉與伺服器連線
+ *
+ * @return {Promise} 回傳Promise，resolve回傳成功訊息，reject回傳錯誤訊息
+ * @example
+ * import WFtp from './src/WFtp.mjs'
+ *
+ * async function test() {
+ *     let r
+ *
+ *     let ftp = WFtp({
+ *         transportation: 'FTP', //'FTP', 'SFTP'
+ *         hostname: st.hostname,
+ *         port: st.port,
+ *         username: st.username,
+ *         password: st.password,
+ *     })
+ *     // console.log('ftp', ftp)
+ *
+ *     await ftp.conn()
+ *
+ *     //actions
+ *
+ *     r = await ftp.quit()
+ *     console.log('ftp.quit', r)
+ *
+ * }
+ * test()
+ *     .catch((err) => {
+ *         console.log(err)
+ *     })
+ */
+async function quit() {
     return null
 }
 
@@ -117,22 +129,23 @@ async function conn(opt = {}) {
  * 遍歷伺服器上指定資料夾內檔案清單資訊
  *
  * @param {String} opt.fdRemote 輸入伺服器上指定資料夾字串
- * @return {Promise} 回傳Promise，resolve回傳檔案清單資訊，reject回傳錯誤訊息
+ * @return {Promise} 回傳Promise，resolve回傳檔案清單陣列，reject回傳錯誤訊息
  * @example
  * import WFtp from './src/WFtp.mjs'
  *
  * async function test() {
  *     let r
  *
- *     let ftp = WFtp()
+ *     let ftp = WFtp({
+ *         transportation: 'FTP', //'FTP', 'SFTP'
+ *         hostname: st.hostname,
+ *         port: st.port,
+ *         username: st.username,
+ *         password: st.password,
+ *     })
  *     // console.log('ftp', ftp)
  *
- *     await ftp.conn({
- *         hostname: st.up.hostname,
- *         port: st.up.port,
- *         username: st.up.username,
- *         password: st.up.password,
- *     })
+ *     await ftp.conn()
  *
  *     let fps = await ftp.ls('.')
  *     console.log('ftp.ls', fps[0], fps.length)
@@ -153,80 +166,6 @@ async function ls(fdRemote = '.') {
 
 
 /**
- * 關閉與伺服器連線
- *
- * @return {Promise} 回傳Promise，resolve回傳成功訊息，reject回傳錯誤訊息
- * @example
- * import WFtp from './src/WFtp.mjs'
- *
- * async function test() {
- *     let r
- *
- *     let ftp = WFtp()
- *     // console.log('ftp', ftp)
- *
- *     await ftp.conn({
- *         hostname: st.up.hostname,
- *         port: st.up.port,
- *         username: st.up.username,
- *         password: st.up.password,
- *     })
- *
- *     //actions
- *
- *     r = await ftp.quit()
- *     console.log('ftp.quit', r)
- *
- * }
- * test()
- *     .catch((err) => {
- *         console.log(err)
- *     })
- */
-async function quit() {
-    return null
-}
-
-
-/**
- * 取得伺服器指定檔案資訊
- *
- * @param {String} opt.fpRemote 輸入伺服器上指定檔案字串
- * @return {Promise} 回傳Promise，resolve回傳檔案資訊，reject回傳錯誤訊息
- * @example
- * import WFtp from './src/WFtp.mjs'
- *
- * async function test() {
- *     let r
- *
- *     let ftp = WFtp()
- *     // console.log('ftp', ftp)
- *
- *     await ftp.conn({
- *         hostname: st.up.hostname,
- *         port: st.up.port,
- *         username: st.up.username,
- *         password: st.up.password,
- *     })
- *
- *     r = await ftp.stateFile('./_test_upload_client/DECL_20210805055044.csv')
- *     console.log('ftp.stateFile', r)
- *
- *     r = await ftp.quit()
- *     console.log('ftp.quit', r)
- *
- * }
- * test()
- *     .catch((err) => {
- *         console.log(err)
- *     })
- */
-async function stateFile(fpRemote) {
-    return null
-}
-
-
-/**
  * 確認伺服器指定檔案是否存在
  *
  * @param {String} opt.fpRemote 輸入伺服器上指定檔案字串
@@ -237,15 +176,16 @@ async function stateFile(fpRemote) {
  * async function test() {
  *     let r
  *
- *     let ftp = WFtp()
+ *     let ftp = WFtp({
+ *         transportation: 'FTP', //'FTP', 'SFTP'
+ *         hostname: st.hostname,
+ *         port: st.port,
+ *         username: st.username,
+ *         password: st.password,
+ *     })
  *     // console.log('ftp', ftp)
  *
- *     await ftp.conn({
- *         hostname: st.up.hostname,
- *         port: st.up.port,
- *         username: st.up.username,
- *         password: st.up.password,
- *     })
+ *     await ftp.conn()
  *
  *     r = await ftp.isFile('./_test_upload_client/DECL_20210805055044.csv')
  *     console.log('ftp.isFile', r)
@@ -275,15 +215,16 @@ async function isFile(fpRemote) {
  * async function test() {
  *     let r
  *
- *     let ftp = WFtp()
+ *     let ftp = WFtp({
+ *         transportation: 'FTP', //'FTP', 'SFTP'
+ *         hostname: st.hostname,
+ *         port: st.port,
+ *         username: st.username,
+ *         password: st.password,
+ *     })
  *     // console.log('ftp', ftp)
  *
- *     await ftp.conn({
- *         hostname: st.up.hostname,
- *         port: st.up.port,
- *         username: st.up.username,
- *         password: st.up.password,
- *     })
+ *     await ftp.conn()
  *
  *     r = await ftp.isFolder('./_test_upload_client')
  *     console.log('ftp.isFolder', r)
@@ -315,15 +256,16 @@ async function isFolder(fpRemote) {
  * async function test() {
  *     let r
  *
- *     let ftp = WFtp()
+ *     let ftp = WFtp({
+ *         transportation: 'FTP', //'FTP', 'SFTP'
+ *         hostname: st.hostname,
+ *         port: st.port,
+ *         username: st.username,
+ *         password: st.password,
+ *     })
  *     // console.log('ftp', ftp)
  *
- *     await ftp.conn({
- *         hostname: st.up.hostname,
- *         port: st.up.port,
- *         username: st.up.username,
- *         password: st.up.password,
- *     })
+ *     await ftp.conn()
  *
  *     r = await ftp.download('./DECL_20210805055044.csv', './_test_download_client/DECL_20210805055044.csv', (p) => {
  *         console.log('ftp.download p', p.name, p.progress)
@@ -357,15 +299,16 @@ async function download(fpRemote, fpLocal, cbProcess = null) {
  * async function test() {
  *     let r
  *
- *     let ftp = WFtp()
+ *     let ftp = WFtp({
+ *         transportation: 'FTP', //'FTP', 'SFTP'
+ *         hostname: st.hostname,
+ *         port: st.port,
+ *         username: st.username,
+ *         password: st.password,
+ *     })
  *     // console.log('ftp', ftp)
  *
- *     await ftp.conn({
- *         hostname: st.up.hostname,
- *         port: st.up.port,
- *         username: st.up.username,
- *         password: st.up.password,
- *     })
+ *     await ftp.conn()
  *
  *     r = await ftp.upload('./_test_upload_client/DECL_20210805055044.csv', './DECL_20210805055044.csv', (p) => {
  *         console.log('ftp.upload p', p.name, p.progress)
@@ -399,15 +342,16 @@ async function upload(fpLocal, fpRemote, cbProcess) {
  * async function test() {
  *     let r
  *
- *     let ftp = WFtp()
+ *     let ftp = WFtp({
+ *         transportation: 'FTP', //'FTP', 'SFTP'
+ *         hostname: st.hostname,
+ *         port: st.port,
+ *         username: st.username,
+ *         password: st.password,
+ *     })
  *     // console.log('ftp', ftp)
  *
- *     await ftp.conn({
- *         hostname: st.up.hostname,
- *         port: st.up.port,
- *         username: st.up.username,
- *         password: st.up.password,
- *     })
+ *     await ftp.conn()
  *
  *     r = await ftp.syncToLocal('.', './_test_download_client', (p) => {
  *         console.log('ftp.syncToLocal p', p.name, p.progress)
@@ -441,15 +385,16 @@ async function syncToLocal(fdRemote, fdLocal, cbProcess) {
  * async function test() {
  *     let r
  *
- *     let ftp = WFtp()
+ *     let ftp = WFtp({
+ *         transportation: 'FTP', //'FTP', 'SFTP'
+ *         hostname: st.hostname,
+ *         port: st.port,
+ *         username: st.username,
+ *         password: st.password,
+ *     })
  *     // console.log('ftp', ftp)
  *
- *     await ftp.conn({
- *         hostname: st.up.hostname,
- *         port: st.up.port,
- *         username: st.up.username,
- *         password: st.up.password,
- *     })
+ *     await ftp.conn()
  *
  *     r = await ftp.syncToRemote('./_test_upload_client', '.', (p) => {
  *         console.log('ftp.syncToRemote p', p.name, p.progress)
@@ -471,24 +416,185 @@ async function syncToRemote(fdLocal, fdRemote, cbProcess) {
 
 
 /**
+ * 取得伺服器指定檔案資訊
+ *
+ * @param {String} opt.fpRemote 輸入伺服器上指定檔案字串
+ * @return {Promise} 回傳Promise，resolve回傳檔案資訊，reject回傳錯誤訊息
+ * @example
+ * import WFtp from './src/WFtp.mjs'
+ *
+ * async function test() {
+ *     let r
+ *
+ *     let ftp = WFtp({
+ *         transportation: 'FTP', //'FTP', 'SFTP'
+ *         hostname: st.hostname,
+ *         port: st.port,
+ *         username: st.username,
+ *         password: st.password,
+ *     })
+ *     // console.log('ftp', ftp)
+ *
+ *     await ftp.conn()
+ *
+ *     r = await ftp.stat('./_test_upload_client/DECL_20210805055044.csv')
+ *     console.log('ftp.stat', r)
+ *
+ *     r = await ftp.quit()
+ *     console.log('ftp.quit', r)
+ *
+ * }
+ * test()
+ *     .catch((err) => {
+ *         console.log(err)
+ *     })
+ */
+async function stat(fpRemote) {
+    return null
+}
+
+
+/**
+ * 伺服器創建資料夾
+ *
+ * @param {String} opt.fpRemote 輸入伺服器上待創建資料夾字串
+ * @return {Promise} 回傳Promise，resolve回傳創建資訊，reject回傳錯誤訊息
+ * @example
+ * import WFtp from './src/WFtp.mjs'
+ *
+ * async function test() {
+ *     let r
+ *
+ *     let ftp = WFtp({
+ *         transportation: 'FTP', //'FTP', 'SFTP'
+ *         hostname: st.hostname,
+ *         port: st.port,
+ *         username: st.username,
+ *         password: st.password,
+ *     })
+ *     // console.log('ftp', ftp)
+ *
+ *     await ftp.conn()
+ *
+ *     r = await ftp.mkdir('./_test_upload_client')
+ *     console.log('ftp.mkdir', r)
+ *
+ *     r = await ftp.quit()
+ *     console.log('ftp.quit', r)
+ *
+ * }
+ * test()
+ *     .catch((err) => {
+ *         console.log(err)
+ *     })
+ */
+async function mkdir(fpRemote) {
+    return null
+}
+
+
+/**
+ * 伺服器變更工作路徑資料夾
+ *
+ * @param {String} opt.fpRemote 輸入伺服器上欲指定之工作路徑資料夾字串
+ * @return {Promise} 回傳Promise，resolve回傳變更資訊，reject回傳錯誤訊息
+ * @example
+ * import WFtp from './src/WFtp.mjs'
+ *
+ * async function test() {
+ *     let r
+ *
+ *     let ftp = WFtp({
+ *         transportation: 'FTP', //'FTP', 'SFTP'
+ *         hostname: st.hostname,
+ *         port: st.port,
+ *         username: st.username,
+ *         password: st.password,
+ *     })
+ *     // console.log('ftp', ftp)
+ *
+ *     await ftp.conn()
+ *
+ *     r = await ftp.cwd('./_test_upload_client')
+ *     console.log('ftp.cwd', r)
+ *
+ *     r = await ftp.quit()
+ *     console.log('ftp.quit', r)
+ *
+ * }
+ * test()
+ *     .catch((err) => {
+ *         console.log(err)
+ *     })
+ */
+async function cwd(fpRemote) {
+    return null
+}
+
+
+/**
+ * 取得伺服器工作路徑資料夾
+ *
+ * @return {Promise} 回傳Promise，resolve回傳工作路徑資料夾字串，reject回傳錯誤訊息
+ * @example
+ * import WFtp from './src/WFtp.mjs'
+ *
+ * async function test() {
+ *     let r
+ *
+ *     let ftp = WFtp({
+ *         transportation: 'FTP', //'FTP', 'SFTP'
+ *         hostname: st.hostname,
+ *         port: st.port,
+ *         username: st.username,
+ *         password: st.password,
+ *     })
+ *     // console.log('ftp', ftp)
+ *
+ *     await ftp.conn()
+ *
+ *     r = await ftp.pwd()
+ *     console.log('ftp.pwd', r)
+ *
+ *     r = await ftp.quit()
+ *     console.log('ftp.quit', r)
+ *
+ * }
+ * test()
+ *     .catch((err) => {
+ *         console.log(err)
+ *     })
+ */
+async function pwd(fpRemote) {
+    return null
+}
+
+
+/**
  * 操作FTP，包含連線、下載、資料夾內檔案同步下載、上傳、資料夾內檔案同步上傳等功能
  *
- * @returns {Object} 回傳FTP操作物件，包含conn、ls、stateFile、isFile、download、syncToLocal、syncToRemote、upload、quit。
+ * @param {Object} [opt={}] 輸入設定物件，預設{}
+ * @param {String} [opt.transportation='FTP'] 輸入傳輸協定字串，可選'FTP'、'SFTP'，預設'FTP'
+ * @param {String} [opt.hostname=''] 輸入hostname字串，預設''
+ * @param {Number} [opt.port=21|22] 輸入port正整數，當transportation='FTP'預設21，當transportation='SFTP'預設22
+ * @param {String} [opt.username=''] 輸入帳號字串，預設''
+ * @param {String} [opt.password=''] 輸入密碼字串，預設''
+ * @returns {Object} 回傳FTP操作物件，包含conn、ls、stat、isFile、download、syncToLocal、syncToRemote、upload、quit。
  * @example
  * import WFtp from './src/WFtp.mjs'
  *
  * async function test_dw() {
  *     let r
  *
- *     let ftp = WFtp()
- *     // console.log('ftp', ftp)
- *
- *     await ftp.conn({
+ *     let ftp = WFtp({
  *         hostname: `{hostname}`,
  *         port: `{port}`,
  *         username: `{username}`,
  *         password: `{password}`,
  *     })
+ *     // console.log('ftp', ftp)
+ *
+ *     await ftp.conn()
  *
  *     async function core() {
  *
@@ -616,675 +722,43 @@ async function syncToRemote(fdLocal, fdRemote, cbProcess) {
  * // ftp.quit { code: 221, text: '221 Goodbye.', isMark: false, isError: false }
  *
  */
-function WFtp() {
+function WFtp(opt = {}) {
+
+    //transportation
+    let transportation = get(opt, 'transportation', 'FTP')
+    if (transportation !== 'FTP' &amp;&amp; transportation !== 'SFTP') {
+        throw new Error(`transportation[${transportation}] is not FTP or SFTP`)
+    }
+
+    //ftp
+    let ftp = null
+    if (transportation === 'FTP') {
+        ftp = new CoreFTP(opt)
+    }
+    else if (transportation === 'SFTP') {
+        ftp = new CoreSFTP(opt)
+    }
+    // console.log('ftp', ftp)
+
+    //add doc, 強制函數關聯至WFTP, 使能由外部虛擬函數自動產生doc
     let doc = {
         doc_conn: conn,
-        doc_ls: ls,
         doc_quit: quit,
-        doc_stateFile: stateFile,
+        doc_ls: ls,
         doc_isFile: isFile,
         doc_isFolder: isFolder,
         doc_download: download,
         doc_upload: upload,
         doc_syncToLocal: syncToLocal,
         doc_syncToRemote: syncToRemote,
+        doc_stat: stat,
+        doc_mkdir: mkdir,
+        doc_cwd: cwd,
+        doc_pwd: pwd,
     }
+    ftp.__doc___ = doc
 
-    function WFtpCore() {
-        let Ftp = null
-        let timeLimit = 1 * 60 * 1000 //1hr
-
-
-        async function ftpConn(opt = {}) {
-
-            //pm
-            let pm = genPm()
-
-            //hostname
-            let hostname = get(opt, 'hostname')
-            if (!isestr(hostname)) {
-                pm.reject(`hostname[${hostname}] is not a effective string`)
-                return pm
-            }
-
-            //port
-            let port = get(opt, 'port')
-            if (!ispint(port)) {
-                pm.reject(`port[${port}] is not a positive integer`)
-                return pm
-            }
-            port = cint(port)
-
-            //username
-            let username = get(opt, 'username')
-            if (!isestr(username)) {
-                pm.reject(`username[${username}] is not a effective string`)
-                return pm
-            }
-
-            //password
-            let password = get(opt, 'password')
-            if (!isestr(password)) {
-                pm.reject(`password[${password}] is not a effective string`)
-                return pm
-            }
-
-            //timeLimit
-            let _timeLimit = get(opt, 'timeLimit')
-            if (isnum(_timeLimit)) {
-
-                //cint
-                _timeLimit = cint(_timeLimit)
-
-                //update
-                timeLimit = _timeLimit
-
-            }
-
-            try {
-                Ftp = new Jsftp({
-                    host: hostname, //hostname or ip
-                    port, // defaults to 21
-                    user: username, // defaults to "anonymous"
-                    pass: password, // defaults to "@anonymous"
-                })
-                Ftp.__doc__ = doc
-                pm.resolve('ok')
-            }
-            catch (err) {
-                pm.reject(err)
-            }
-
-            return pm
-        }
-
-
-        async function ftpLs(fdRemote = '.') {
-
-            //pm
-            let pm = genPm()
-
-            //check
-            if (Ftp === null) {
-                pm.reject(`FTP has not been initialized. please use 'conn' to construct FTP`)
-                return pm
-            }
-
-            //timeLimit
-            let t = setTimeout(() => {
-                pm.reject(`ftpLs timeout[${timeLimit}]`)
-            }, timeLimit)
-
-            Ftp.ls(fdRemote, (err, res) => {
-
-                //clearTimeout
-                clearTimeout(t)
-
-                if (err) {
-                    pm.reject(err)
-                }
-                else {
-                    res = map(res, (v) => {
-                        let d = ot(v.time) //jsfpt解析時間係基於ls, 其檔案變更時間精度只至分而沒有秒, 故無法提供精確的檔案變更時間
-                        v.ctime = d.format('YYYY-MM-DDTHH:mm:ssZ') //添加UTC時間
-                        v.isFolder = ftpIsFolderCore(v)
-                        return v
-                    })
-                    pm.resolve(res)
-                }
-            })
-
-            return pm
-        }
-
-
-        async function ftpQuit() {
-
-            //pm
-            let pm = genPm()
-
-            //check
-            if (Ftp === null) {
-                pm.reject(`FTP has not been initialized. please use 'conn' to construct FTP`)
-                return pm
-            }
-
-            //timeLimit
-            let t = setTimeout(() => {
-
-                //destroy
-                Ftp.destroy()
-
-                //clear
-                Ftp = null
-
-                pm.reject(`ftpQuit timeout[${timeLimit}]`)
-            }, timeLimit)
-
-            Ftp.raw('quit', (err, res) => {
-
-                //clearTimeout
-                clearTimeout(t)
-
-                //destroy
-                Ftp.destroy()
-
-                //clear
-                Ftp = null
-
-                if (err) {
-                    pm.reject(err)
-                }
-                else {
-                    pm.resolve(res)
-                }
-            })
-
-            return pm
-        }
-
-
-        async function ftpStateFile(fpRemote) {
-
-            //ftpLs
-            let file = null
-            await ftpLs(fpRemote)
-                .then((res) => {
-                    file = res
-                })
-                .catch(() => {
-                    file = null
-                })
-
-            //get
-            file = get(file, 0, null)
-            // console.log('file', file)
-
-            return file
-        }
-
-
-        function ftpIsFolderCore(file) {
-
-            //check
-            if (!iseobj(file)) {
-                return false
-            }
-
-            //type
-            let type = get(file, 'type', -1)
-
-            //b
-            let b = type === 1
-
-            return b
-        }
-
-
-        function ftpIsFileCore(file) {
-
-            //check
-            if (!iseobj(file)) {
-                return false
-            }
-
-            //type
-            let type = get(file, 'type', -1)
-
-            //b
-            let b = type === 0
-
-            return b
-        }
-
-
-        async function ftpIsFolder(fpRemote) {
-
-            //ftpStateFile
-            let file = await ftpStateFile(fpRemote)
-
-            //ftpIsFolderCore
-            let b = ftpIsFolderCore(file)
-
-            return b
-        }
-
-
-        async function ftpIsFile(fpRemote) {
-
-            //ftpIsFileCore
-            let b = await ftpIsFileCore(fpRemote)
-
-            return b
-        }
-
-
-        async function ftpDownload(fpRemote, fpLocal, cbProcess = null) {
-
-            //pm
-            let pm = genPm()
-
-            //check
-            if (Ftp === null) {
-                pm.reject(`FTP has not been initialized. please use 'conn' to construct FTP`)
-                return pm
-            }
-
-            //fpRemote
-            if (!isestr(fpRemote)) {
-                pm.reject(`fpRemote[${fpRemote}] is not a effective string`)
-                return pm
-            }
-
-            //fpLocal
-            if (!isestr(fpLocal)) {
-                pm.reject(`fpLocal[${fpLocal}] is not a effective string`)
-                return pm
-            }
-
-            //fdLocal
-            let fdLocal = path.basename(path.dirname(fpLocal))
-
-            //check fdLocal
-            if (!fsIsFolder(fdLocal)) {
-                fsCreateFolder(fdLocal)
-            }
-
-            //ftpStateFile
-            let file = await ftpStateFile(fpRemote)
-            // console.log('file', file)
-
-            //ftpIsFileCore
-            let b = await ftpIsFileCore(file)
-            // console.log('b', b)
-
-            //check
-            if (!b) {
-                pm.reject(`fpRemote[${fpRemote}] is not a file`)
-                return pm
-            }
-
-            //check
-            if (!iseobj(file)) {
-                pm.reject(`fpRemote[${fpRemote}] does not have information`)
-                return pm
-            }
-
-            //fileSize
-            let fileSize = get(file, 'size')
-
-            //check
-            if (!isnum(fileSize)) {
-                pm.reject(`can not get the size of file[${fpRemote}]`)
-                return pm
-            }
-            fileSize = cint(fileSize)
-            // console.log('fileSize', fileSize)
-
-            //timeLimit
-            let t = setTimeout(() => {
-                pm.reject(`ftpDownload timeout[${timeLimit}]`)
-            }, timeLimit)
-
-            Ftp.get(fpRemote, (err, socket) => {
-
-                //check
-                if (err) {
-
-                    //clearTimeout
-                    clearTimeout(t)
-
-                    pm.reject(err)
-                }
-
-                //check
-                if (fsIsFile(fpLocal)) {
-                    fs.unlinkSync(fpLocal)
-                }
-
-                //createWriteStream
-                let writer = fs.createWriteStream(fpLocal)
-
-                //on data
-                let dss = 0
-                socket.on('data', (d) => {
-                    // console.log('socket.on data', d)
-
-                    //cbProcess
-                    if (isfun(cbProcess)) {
-                        let ds = size(d)
-                        dss += ds
-                        let r = dss / fileSize * 100
-                        // console.log(`receving... ${dig((r), 1)}%`)
-                        cbProcess({
-                            progress: r,
-                            name: getFileName(fpLocal),
-                            fpRemote,
-                            fpLocal,
-                        })
-                    }
-
-                    //write
-                    writer.write(d)
-
-                })
-
-                //on close
-                socket.on('close', (err) => {
-
-                    //clearTimeout
-                    clearTimeout(t)
-
-                    if (err) {
-                        pm.reject(err)
-                    }
-                    else {
-                        pm.resolve('ok')
-                    }
-                })
-
-                //resume
-                socket.resume()
-
-            })
-
-            return pm
-        }
-
-
-        async function ftpUpload(fpLocal, fpRemote, cbProcess) {
-
-            //pm
-            let pm = genPm()
-
-            //check
-            if (Ftp === null) {
-                pm.reject(`FTP has not been initialized. please use 'conn' to construct FTP`)
-                return pm
-            }
-
-            //fpRemote
-            if (!isestr(fpRemote)) {
-                pm.reject(`fpRemote[${fpRemote}] is not a effective string`)
-                return pm
-            }
-
-            //fpLocal
-            if (!isestr(fpLocal)) {
-                pm.reject(`fpLocal[${fpLocal}] is not a effective string`)
-                return pm
-            }
-
-            //check
-            if (!fsIsFile(fpLocal)) {
-                pm.reject(`fpLocal[${fpLocal}] is not a file`)
-                return pm
-            }
-
-            //statSync
-            let stat = fs.statSync(fpLocal)
-
-            //fileSize
-            let fileSize = get(stat, 'size')
-
-            //check
-            if (!isnum(fileSize)) {
-                pm.reject(`can not get the size of file[${fpLocal}]`)
-                return pm
-            }
-            fileSize = cint(fileSize)
-            // console.log('fileSize', fileSize)
-
-            //bufferLocal
-            let bufferLocal = fs.readFileSync(fpLocal)
-
-            // //createReadStream
-            // let reader = fs.createReadStream(fpLocal)
-
-            //timeLimit
-            let t = setTimeout(() => {
-                pm.reject(`ftpUpload timeout[${timeLimit}]`)
-            }, timeLimit)
-
-            let dss = 0
-            Ftp.put(bufferLocal, fpRemote, (err, buffer) => {
-                // console.log('Ftp.put', err, buffer)
-
-                //check
-                if (err) {
-
-                    //clearTimeout
-                    clearTimeout(t)
-
-                    pm.reject(err)
-                    return
-                }
-
-                //check
-                if (size(buffer) === 0) {
-
-                    //clearTimeout
-                    clearTimeout(t)
-
-                    pm.resolve('ok')
-                    return
-                }
-
-                //cbProcess
-                if (isfun(cbProcess)) {
-                    let ds = size(buffer)
-                    dss += ds
-                    let r = dss / fileSize * 100
-                    // console.log(`receving... ${dig((r), 1)}%`)
-                    cbProcess({
-                        progress: r,
-                        name: getFileName(fpLocal),
-                        fpRemote,
-                        fpLocal,
-                    })
-                }
-
-            })
-
-            return pm
-        }
-
-
-        async function ftpSyncToLocal(fdRemote, fdLocal, cbProcess) {
-
-            //check
-            if (Ftp === null) {
-                return Promise.reject(`FTP has not been initialized. please use 'conn' to construct FTP`)
-            }
-
-            //ftpLs
-            let fsRemote = await ftpLs(fdRemote)
-            fsRemote = filter(fsRemote, (v) => {
-                return !v.isFolder
-            })
-            // console.log('fsRemote', fsRemote)
-
-            //check fdLocal
-            if (!fsIsFolder(fdLocal)) {
-                fsCreateFolder(fdLocal)
-            }
-
-            //fsTreeFolder
-            let fsLocal = fsTreeFolder(fdLocal)
-            fsLocal = filter(fsLocal, (v) => {
-                return !v.isFolder
-            })
-            fsLocal = map(fsLocal, (v) => {
-                let stat = fs.statSync(v.path)
-                v.size = cstr(get(stat, 'size', ''))
-                return v
-            })
-            // console.log('fsLocal', fsLocal)
-
-            //pmSeries
-            let n = 0
-            let ss = []
-            await pmSeries(fsRemote, async (fileRemote) => {
-
-                //fileLocal
-                let fileLocal = find(fsLocal, { name: fileRemote.name })
-                // console.log('fileLocal', fileLocal)
-
-                //fpRemote
-                // let fpRemote = path.resolve(fdRemote, v.name)
-                let fpRemote = fdRemote
-                if (!strleft(fpRemote, 1) !== '/') {
-                    fpRemote += '/'
-                }
-                fpRemote += get(fileRemote, 'name', '')
-                // console.log('fpRemote', fpRemote)
-
-                //fpLocal
-                let fpLocal = path.resolve(fdLocal, get(fileRemote, 'name', ''))
-                // console.log('fpLocal', fpLocal)
-
-                //cb
-                let cb = (msg) => {
-                    if (isfun(cbProcess)) {
-                        cbProcess(msg)
-                    }
-                }
-
-                //ftpDownload
-                if (!iseobj(fileLocal)) {
-                //本地檔案不存在
-                    await ftpDownload(fpRemote, fpLocal, cb)
-                    n++
-                    ss.push({
-                        name: fileRemote.name,
-                        reason: 'no local file',
-                    })
-                }
-                else if (fileRemote.size !== fileLocal.size) {
-                //本地檔案大小與遠端檔案大小不同
-                    await ftpDownload(fpRemote, fpLocal, cb)
-                    n++
-                    ss.push({
-                        name: fileRemote.name,
-                        reason: `size[${fileLocal.size}] of local file != size[${fileRemote.size}] of remote file`,
-                    })
-                }
-
-            })
-
-            return {
-                num: n,
-                files: ss,
-            }
-        }
-
-
-        async function ftpSyncToRemote(fdLocal, fdRemote, cbProcess) {
-
-            //check
-            if (Ftp === null) {
-                return Promise.reject(`FTP has not been initialized. please use 'conn' to construct FTP`)
-            }
-
-            //ftpLs
-            let fsRemote = await ftpLs(fdRemote)
-            // fsRemote = map(fsRemote, (v) => {
-            //     let d = dayjs(v.time)
-            //     v.stat = d.format('YYYY-MM-DDTHH:mm:ss')
-            //     return v
-            // })
-            // console.log('fsRemote', fsRemote)
-
-            //check fdLocal
-            if (!fsIsFolder(fdLocal)) {
-                return Promise.reject(`fdLocal[${fdLocal}] is not a folder`)
-            }
-
-            //fsTreeFolder
-            let fsLocal = fsTreeFolder(fdLocal)
-            fsLocal = filter(fsLocal, (v) => {
-                return !v.isFolder
-            })
-            fsLocal = map(fsLocal, (v) => {
-                let stat = fs.statSync(v.path)
-                v.size = cstr(get(stat, 'size', ''))
-                return v
-            })
-            // console.log('fsLocal', fsLocal)
-
-            //pmSeries
-            let n = 0
-            let ss = []
-            await pmSeries(fsLocal, async (fileLocal) => {
-
-                //fileRemote
-                let fileRemote = find(fsRemote, { name: fileLocal.name })
-                // console.log('fileRemote', fileRemote)
-
-                //fpRemote
-                // let fpRemote = path.resolve(fdRemote, v.name)
-                let fpRemote = fdRemote
-                if (!strleft(fpRemote, 1) !== '/') {
-                    fpRemote += '/'
-                }
-                fpRemote += get(fileLocal, 'name', '')
-                // console.log('fpRemote', fpRemote)
-
-                //fpLocal
-                let fpLocal = path.resolve(fdLocal, get(fileLocal, 'name', ''))
-                // console.log('fpLocal', fpLocal)
-
-                //cb
-                let cb = (msg) => {
-                    if (isfun(cbProcess)) {
-                        cbProcess(msg)
-                    }
-                }
-
-                //ftpUpload
-                if (!iseobj(fileRemote)) {
-                    //遠端檔案不存在
-                    await ftpUpload(fpLocal, fpRemote, cb)
-                    n++
-                    ss.push({
-                        name: fileLocal.name,
-                        reason: 'no Remote file',
-                    })
-                }
-                else if (fileLocal.size !== fileRemote.size) {
-                    //遠端檔案大小與本機檔案大小不同
-                    await ftpUpload(fpLocal, fpRemote, cb)
-                    n++
-                    ss.push({
-                        name: fileLocal.name,
-                        reason: `size[${fileRemote.size}] of remote file != size[${fileLocal.size}] of local file`,
-                    })
-                }
-
-            })
-
-            return {
-                num: n,
-                files: ss,
-            }
-        }
-
-
-        return {
-            conn: ftpConn,
-            ls: ftpLs,
-            stateFile: ftpStateFile,
-            isFile: ftpIsFile,
-            isFolder: ftpIsFolder,
-            download: ftpDownload,
-            syncToLocal: ftpSyncToLocal,
-            syncToRemote: ftpSyncToRemote,
-            upload: ftpUpload,
-            quit: ftpQuit,
-        }
-    }
-
-    return new WFtpCore()
+    return ftp
 }
 
 
@@ -1303,7 +777,7 @@ export default WFtp
 <br class="clear">
 
 <footer>
-    Documentation generated by <a href="https://github.com/jsdoc3/jsdoc">JSDoc 4.0.2</a> on Thu Mar 30 2023 20:34:20 GMT+0800 (台北標準時間) using the <a href="https://github.com/clenemt/docdash">docdash</a> theme.
+    Documentation generated by <a href="https://github.com/jsdoc3/jsdoc">JSDoc 4.0.2</a> on Sun Aug 20 2023 20:16:49 GMT+0800 (台北標準時間) using the <a href="https://github.com/clenemt/docdash">docdash</a> theme.
 </footer>
 
 <script>prettyPrint();</script>
