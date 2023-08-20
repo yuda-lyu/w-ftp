@@ -24,6 +24,7 @@ rollupFiles({
         'once': 'once',
         'unorm': 'unorm',
         'debug': 'debug',
+        'ssh2-sftp-client': 'ssh2-sftp-client',
     },
     external: [
         'path',
@@ -38,6 +39,7 @@ rollupFiles({
         'once',
         'unorm',
         'debug',
+        'ssh2-sftp-client',
     ],
 })
 
