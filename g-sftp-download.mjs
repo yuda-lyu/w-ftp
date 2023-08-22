@@ -30,6 +30,9 @@ async function test_dw() {
         let fps = await ftp.ls('./_test_download_srv')
         console.log('ftp.ls', fps[0], fps.length)
 
+        r = await ftp.stat('./_test_download_srv/DECL_202108.csv')
+        console.log('ftp.stat', r)
+
         r = await ftp.isFile('./_test_download_srv/DECL_20210805055044.csv')
         console.log('ftp.isFile', r)
 
@@ -51,7 +54,7 @@ async function test_dw() {
 
         r = await ftp.syncToLocal('./_test_download_srv', './_test_download_client', (p) => {
             console.log('ftp.syncToLocal p', p.name, p.progress)
-        })
+        }, { forceOverwriteWhenSync: false })
         console.log('ftp.syncToLocal', r)
 
     }
@@ -73,15 +76,33 @@ test_dw()
 //   name: 'DECL_202108.csv',
 //   size: 218690,
 //   modifyTime: 1692347520000,
-//   accessTime: 1692517558000,
+//   accessTime: 1692692553000,
 //   rights: { user: 'rw', group: '***', other: '***' },
 //   owner: 0,
 //   group: 0,
 //   longname: '-rw-******    1 -        -          218690 Aug 18 16:32 DECL_202108.csv',
-//   ctime: '2023-08-18T16:32:00+08:00',
-//   atime: '2023-08-20T15:45:58+08:00',
+//   atime: '2023-08-22T16:22:33+08:00',
+//   mtime: '2023-08-18T16:32:00+08:00',
 //   isFolder: false
 // } 5
+// ftp.stat {
+//   mode: 33152,
+//   uid: 0,
+//   gid: 0,
+//   size: 218690,
+//   accessTime: 1692692553000,
+//   modifyTime: 1692347520000,
+//   isDirectory: false,
+//   isFile: true,
+//   isBlockDevice: false,
+//   isCharacterDevice: false,
+//   isSymbolicLink: false,
+//   isFIFO: false,
+//   isSocket: false,
+//   atime: '2023-08-22T16:22:33+08:00',
+//   mtime: '2023-08-18T16:32:00+08:00',
+//   name: './_test_download_srv/DECL_202108.csv'
+// }
 // ftp.isFile true
 // ftp.isFile true
 // ftp.isFolder false

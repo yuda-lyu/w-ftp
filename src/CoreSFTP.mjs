@@ -128,10 +128,10 @@ function CoreSFTP(opt = {}) {
         res = map(res, (v) => {
             // console.log('v', v)
             let d
-            d = ot(v.modifyTime)
-            v.ctime = d.format('YYYY-MM-DDTHH:mm:ssZ') //添加UTC修改時間
             d = ot(v.accessTime)
-            v.atime = d.format('YYYY-MM-DDTHH:mm:ssZ') //添加UTC存取時間
+            v.atime = d.format('YYYY-MM-DDTHH:mm:ssZ') //添加UTC存取時間, 為UTC不須再轉
+            d = ot(v.modifyTime)
+            v.mtime = d.format('YYYY-MM-DDTHH:mm:ssZ') //添加UTC修改時間, 為UTC不須再轉
             v.isFolder = ftpIsFolderCore(v)
             return v
         })
@@ -256,14 +256,23 @@ function CoreSFTP(opt = {}) {
                 // isSymbolicLink: false, // true if object is a symbolic link
                 // isFIFO: false, // true if object is a FIFO
                 // isSocket: false // true if object is a socket
+                let d
+                d = ot(res.accessTime)
+                let atime = d.format('YYYY-MM-DDTHH:mm:ssZ') //添加UTC存取時間, 為UTC不須再轉
+                d = ot(res.modifyTime)
+                let mtime = d.format('YYYY-MM-DDTHH:mm:ssZ') //添加UTC修改時間, 為UTC不須再轉
                 file = {
                     ...res,
+                    atime,
+                    mtime,
                     name: fpRemote,
                 }
             })
-            .catch(() => {
+            .catch((err) => {
                 // console.log('Ftp.stat catch', err)
-                file = null
+                file = {
+                    err: err.toString(),
+                }
             })
         // console.log('file', file)
 
@@ -402,7 +411,7 @@ function CoreSFTP(opt = {}) {
         }
 
         //fileSize
-        let fileSize = get(file, 'size')
+        let fileSize = get(file, 'size', '')
 
         //check
         if (!isnum(fileSize)) {

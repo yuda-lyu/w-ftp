@@ -27,8 +27,14 @@ async function test_up() {
 
     async function core() {
 
-        let fps = await ftp.ls('./_test_download_srv')
+        let fps = await ftp.ls('./_test_upload_srv')
         console.log('ftp.ls', fps[0], fps.length)
+
+        r = await ftp.stat('./_test_upload_srv/DECL_202108.csv')
+        console.log('ftp.stat', r)
+
+        r = await ftp.stat('./_test_upload_srv/L1-DECL_202108.csv')
+        console.log('ftp.stat', r)
 
         r = await ftp.isFile('./_test_upload_srv/DECL_20210805055044.csv')
         console.log('ftp.isFile', r)
@@ -60,7 +66,7 @@ async function test_up() {
 
         r = await ftp.syncToRemote('./_test_upload_client', './_test_upload_srv', (p) => {
             console.log('ftp.syncToRemote p', p.name, p.progress)
-        })
+        }, { forceOverwriteWhenSync: false })
         console.log('ftp.syncToRemote', r)
 
     }
@@ -78,24 +84,45 @@ test_up()
         console.log(err)
     })
 // ftp.ls {
-//   type: '-',
-//   name: 'DECL_202108.csv',
-//   size: 218690,
-//   modifyTime: 1692347520000,
-//   accessTime: 1692517558000,
-//   rights: { user: 'rw', group: '***', other: '***' },
+//   type: 'd',
+//   name: 'test2',
+//   size: 0,
+//   modifyTime: 1692529018000,
+//   accessTime: 1692692728000,
+//   rights: { user: 'rwx', group: '***', other: '***' },
 //   owner: 0,
 //   group: 0,
-//   longname: '-rw-******    1 -        -          218690 Aug 18 16:32 DECL_202108.csv',
-//   ctime: '2023-08-18T16:32:00+08:00',
-//   atime: '2023-08-20T15:45:58+08:00',
-//   isFolder: false
-// } 5
+//   longname: 'drwx******    1 -        -               0 Aug 20 18:56 test2',
+//   atime: '2023-08-22T16:25:28+08:00',
+//   mtime: '2023-08-20T18:56:58+08:00',
+//   isFolder: true
+// } 1
+// ftp.stat {
+//   err: 'Error: _xstat: No such file: ./_test_upload_srv/DECL_202108.csv'
+// }
+// ftp.stat {
+//   err: 'Error: _xstat: No such file: ./_test_upload_srv/L1-DECL_202108.csv'
+// }
 // ftp.isFile false
 // ftp.isFile false
 // ftp.isFile false
 // ftp.isFile false
 // ftp.isFolder false
+// Ftp.stat then {
+//   mode: 16832,
+//   uid: 0,
+//   gid: 0,
+//   size: 0,
+//   accessTime: 1692692728000,
+//   modifyTime: 1692529018000,
+//   isDirectory: true,
+//   isFile: false,
+//   isBlockDevice: false,
+//   isCharacterDevice: false,
+//   isSymbolicLink: false,
+//   isFIFO: false,
+//   isSocket: false
+// }
 // ftp.isFolder true
 // ftp.upload p L1-DECL_20210805055044.csv 2.3660435777166757
 // ftp.upload p L1-DECL_20210805055044.csv 4.7320871554333515

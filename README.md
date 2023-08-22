@@ -97,7 +97,7 @@ test_dw()
 //   userPermissions: { read: true, write: true, exec: false },
 //   groupPermissions: { read: true, write: true, exec: false },
 //   otherPermissions: { read: true, write: true, exec: false },
-//   ctime: '2023-08-18T08:32:00+08:00',
+//   mtime: '2023-08-18T08:32:00+08:00',
 //   isFolder: false
 // } 5
 // ftp.isFile true
@@ -288,7 +288,7 @@ test_up()
 //   userPermissions: { read: true, write: true, exec: false },
 //   groupPermissions: { read: true, write: true, exec: false },
 //   otherPermissions: { read: true, write: true, exec: false },
-//   ctime: '2023-08-20T11:13:00+08:00',
+//   mtime: '2023-08-20T11:13:00+08:00',
 //   isFolder: false
 // } 3
 // ftp.isFile false
@@ -410,7 +410,7 @@ test_dw()
 //   owner: 0,
 //   group: 0,
 //   longname: '-rw-******    1 -        -          218690 Aug 18 16:32 DECL_202108.csv',
-//   ctime: '2023-08-18T16:32:00+08:00',
+//   mtime: '2023-08-18T16:32:00+08:00',
 //   atime: '2023-08-20T15:45:58+08:00',
 //   isFolder: false
 // } 5
@@ -686,7 +686,7 @@ test_up()
 //   owner: 0,
 //   group: 0,
 //   longname: '-rw-******    1 -        -          218690 Aug 18 16:32 DECL_202108.csv',
-//   ctime: '2023-08-18T16:32:00+08:00',
+//   mtime: '2023-08-18T16:32:00+08:00',
 //   atime: '2023-08-20T15:45:58+08:00',
 //   isFolder: false
 // } 5

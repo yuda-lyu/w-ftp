@@ -2,6 +2,7 @@ import path from 'path'
 import fs from 'fs'
 import get from 'lodash/get'
 import map from 'lodash/map'
+import each from 'lodash/each'
 import size from 'lodash/size'
 import last from 'lodash/last'
 import genPm from 'wsemi/src/genPm.mjs'
@@ -12,6 +13,8 @@ import iseobj from 'wsemi/src/iseobj.mjs'
 import isfun from 'wsemi/src/isfun.mjs'
 import isnum from 'wsemi/src/isnum.mjs'
 import haskey from 'wsemi/src/haskey.mjs'
+import sep from 'wsemi/src/sep.mjs'
+import strleft from 'wsemi/src/strleft.mjs'
 import pmSeries from 'wsemi/src/pmSeries.mjs'
 import getFileName from 'wsemi/src/getFileName.mjs'
 import fsIsFolder from 'wsemi/src/fsIsFolder.mjs'
@@ -83,6 +86,27 @@ function CoreFTP(opt = {}) {
     }
 
 
+    function ftpMsToTime(ms) {
+        let mtime = ''
+        if (!isnum(ms) && !isestr(ms)) {
+            return mtime
+        }
+        try {
+            // console.log('t0', ms)
+            let d = ot(ms)
+            let t = d.format('YYYY-MM-DDTHH:mm:ss')
+            // console.log('t1', t)
+            t = `${t}+00:00` //添加格林威治時間
+            // console.log('t2', t)
+            d = ot(t)
+            mtime = d.format('YYYY-MM-DDTHH:mm:ssZ') //添加UTC時間
+            // console.log('t3', mtime)
+        }
+        catch (err) {}
+        return mtime
+    }
+
+
     async function ftpLs(fdRemote = '.') {
 
         //pm
@@ -109,8 +133,7 @@ function CoreFTP(opt = {}) {
             }
             else {
                 res = map(res, (v) => {
-                    let d = ot(v.time) //jsfpt解析時間係基於ls, 其檔案變更時間精度只至分而沒有秒, 故無法提供精確的檔案變更時間
-                    v.ctime = d.format('YYYY-MM-DDTHH:mm:ssZ') //添加UTC時間
+                    v.mtime = ftpMsToTime(v.time)
                     v.size = cint(v.size)
                     v.isFolder = ftpIsFolderCore(v)
                     return v
@@ -299,13 +322,27 @@ function CoreFTP(opt = {}) {
         }
 
         //parse rmlst
+        let cft = (text) => {
+            let s = sep(text, ';')
+            let r = ''
+            each(s, (v) => {
+                if (strleft(v, 7) === 'modify=') {
+                    let ss = sep(v, '=')
+                    r = get(ss, 1, '')
+                }
+            })
+            return r
+        }
         if (true) {
             let text = get(rmlst, 'text', '')
             let isFolder = text.indexOf('type=dir;') >= 0
             let isFile = text.indexOf('type=file;') >= 0
+            let imtime = cft(text)
+            let mtime = ftpMsToTime(imtime)
             r = {
                 ...r,
                 rmlst,
+                mtime,
                 isFolder,
                 isFile,
             }
@@ -488,7 +525,7 @@ function CoreFTP(opt = {}) {
         }
 
         //fileSize
-        let fileSize = get(file, 'size')
+        let fileSize = get(file, 'size', '')
 
         //check
         if (!isnum(fileSize)) {
@@ -749,11 +786,11 @@ function CoreFTP(opt = {}) {
         isFolder: ftpIsFolder,
         download: ftpDownload,
         upload: ftpUpload,
-        syncToLocal: async (fdRemote, fdLocal, cbProcess) => {
-            return ftpSyncToLocal(fdRemote, fdLocal, cbProcess, { ftpLs, ftpDownload })
+        syncToLocal: async (fdRemote, fdLocal, cbProcess, opt = {}) => {
+            return ftpSyncToLocal(fdRemote, fdLocal, cbProcess, { ...opt, ftpLs, ftpDownload })
         },
-        syncToRemote: async (fdLocal, fdRemote, cbProcess) => {
-            return ftpSyncToRemote(fdLocal, fdRemote, cbProcess, { ftpLs, ftpUpload })
+        syncToRemote: async (fdLocal, fdRemote, cbProcess, opt = {}) => {
+            return ftpSyncToRemote(fdLocal, fdRemote, cbProcess, { ...opt, ftpLs, ftpUpload })
         },
         stat: ftpStateTar,
         mkdir: ftpMkdir,

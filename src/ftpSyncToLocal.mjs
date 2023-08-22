@@ -1,6 +1,7 @@
 import get from 'lodash/get'
 import find from 'lodash/find'
 import iseobj from 'wsemi/src/iseobj.mjs'
+import isbol from 'wsemi/src/isbol.mjs'
 import isfun from 'wsemi/src/isfun.mjs'
 import pmSeries from 'wsemi/src/pmSeries.mjs'
 import fsIsFolder from 'wsemi/src/fsIsFolder.mjs'
@@ -9,6 +10,12 @@ import ftpTreeFilesInLocalAndRemote from './ftpTreeFilesInLocalAndRemote.mjs'
 
 
 async function ftpSyncToLocal(fdRemote, fdLocal, cbProcess, opt = {}) {
+
+    //forceOverwriteWhenSync
+    let forceOverwriteWhenSync = get(opt, 'forceOverwriteWhenSync')
+    if (!isbol(forceOverwriteWhenSync)) {
+        forceOverwriteWhenSync = false
+    }
 
     //ftpLs
     let ftpLs = get(opt, 'ftpLs')
@@ -73,8 +80,8 @@ async function ftpSyncToLocal(fdRemote, fdLocal, cbProcess, opt = {}) {
                 reason: 'no local file',
             })
         }
-        else if (fileRemote.size !== fileLocal.size) {
-            //因無法對伺服器端檔案計算hash, 暫時用本地檔案大小與遠端檔案大小檢測是否有變更
+        else if (forceOverwriteWhenSync || (fileRemote.size !== fileLocal.size)) {
+            //因無法對伺服器端檔案計算hash, 且儲存至本機的檔案變更時間為當時時間無法用以判斷, 暫時用本地檔案大小與遠端檔案大小檢測是否有變更
             await ftpDownload(fpRemote, fpLocal, cb)
             n++
             ss.push({

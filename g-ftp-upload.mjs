@@ -30,6 +30,12 @@ async function test_up() {
         let fps = await ftp.ls('.')
         console.log('ftp.ls', fps[0], fps.length) //_test_upload_srv預先建置test2資料夾, 故fps.length=1
 
+        r = await ftp.stat('./DECL_202108.csv')
+        console.log('ftp.stat', r)
+
+        r = await ftp.stat('./L1-DECL_202108.csv')
+        console.log('ftp.stat', r)
+
         r = await ftp.isFile('./DECL_20210805055044.csv')
         console.log('ftp.isFile', r)
 
@@ -60,7 +66,7 @@ async function test_up() {
 
         r = await ftp.syncToRemote('./_test_upload_client', '.', (p) => {
             console.log('ftp.syncToRemote p', p.name, p.progress)
-        })
+        }, { forceOverwriteWhenSync: false })
         console.log('ftp.syncToRemote', r)
 
     }
@@ -78,20 +84,36 @@ test_up()
         console.log(err)
     })
 // ftp.ls {
-//   name: 'L1-DECL_20210805055044.csv',
-//   type: 0,
-//   time: 1692501180000,
-//   size: 1384928,
+//   name: 'test2',
+//   type: 1,
+//   time: 1692430740000,
+//   size: 0,
 //   owner: 'ftp',
 //   group: 'ftp',
-//   userPermissions: { read: true, write: true, exec: false },
-//   groupPermissions: { read: true, write: true, exec: false },
-//   otherPermissions: { read: true, write: true, exec: false },
-//   ctime: '2023-08-20T11:13:00+08:00',
-//   isFolder: false
-// } 3
+//   userPermissions: { read: true, write: true, exec: true },
+//   groupPermissions: { read: true, write: true, exec: true },
+//   otherPermissions: { read: true, write: true, exec: true },
+//   mtime: '2023-08-19T23:39:00+08:00',
+//   isFolder: true
+// } 1
+// ftp.stat {
+//   rmlst: { err: "Error: 550 Couldn't open the file or directory" },
+//   mtime: '',
+//   isFolder: false,
+//   isFile: false,
+//   rsize: { err: "Error: 550 Couldn't open the file or directory" },
+//   size: 0
+// }
+// ftp.stat {
+//   rmlst: { err: "Error: 550 Couldn't open the file or directory" },
+//   mtime: '',
+//   isFolder: false,
+//   isFile: false,
+//   rsize: { err: "Error: 550 Couldn't open the file or directory" },
+//   size: 0
+// }
 // ftp.isFile false
-// ftp.isFile true
+// ftp.isFile false
 // ftp.isFile false
 // ftp.isFile false
 // ftp.isFolder false
