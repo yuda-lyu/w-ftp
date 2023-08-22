@@ -54,6 +54,9 @@ async function test_dw() {
         let fps = await ftp.ls('.')
         console.log('ftp.ls', fps[0], fps.length)
 
+        r = await ftp.stat('./DECL_202108.csv')
+        console.log('ftp.stat', r)
+
         r = await ftp.isFile('./DECL_20210805055044.csv')
         console.log('ftp.isFile', r)
 
@@ -70,7 +73,7 @@ async function test_dw() {
 
         r = await ftp.syncToLocal('.', './_test_download_client', (p) => {
             console.log('ftp.syncToLocal p', p.name, p.progress)
-        })
+        }, { forceOverwriteWhenSync: false })
         console.log('ftp.syncToLocal', r)
 
     }
@@ -97,9 +100,24 @@ test_dw()
 //   userPermissions: { read: true, write: true, exec: false },
 //   groupPermissions: { read: true, write: true, exec: false },
 //   otherPermissions: { read: true, write: true, exec: false },
-//   mtime: '2023-08-18T08:32:00+08:00',
+//   mtime: '2023-08-18T16:32:00+08:00',
 //   isFolder: false
 // } 5
+// ftp.stat {
+//   rmlst: {
+//     code: 250,
+//     text: '250-Listing ./DECL_202108.csv\n' +
+//       ' type=file;size=218690;modify=20230818083200.283;perms=awrfd; /DECL_202108.csv\n' +
+//       '250 End',
+//     isMark: false,
+//     isError: false
+//   },
+//   mtime: '2023-08-18T16:32:00+08:00',
+//   isFolder: false,
+//   isFile: true,
+//   rsize: { code: 213, text: '213 218690', isMark: false, isError: false },
+//   size: 218690
+// }
 // ftp.isFile true
 // ftp.isFile true
 // ftp.isFolder false
@@ -231,6 +249,12 @@ async function test_up() {
         let fps = await ftp.ls('.')
         console.log('ftp.ls', fps[0], fps.length) //_test_upload_srv預先建置test2資料夾, 故fps.length=1
 
+        r = await ftp.stat('./DECL_202108.csv')
+        console.log('ftp.stat', r)
+
+        r = await ftp.stat('./L1-DECL_202108.csv')
+        console.log('ftp.stat', r)
+
         r = await ftp.isFile('./DECL_20210805055044.csv')
         console.log('ftp.isFile', r)
 
@@ -261,7 +285,7 @@ async function test_up() {
 
         r = await ftp.syncToRemote('./_test_upload_client', '.', (p) => {
             console.log('ftp.syncToRemote p', p.name, p.progress)
-        })
+        }, { forceOverwriteWhenSync: false })
         console.log('ftp.syncToRemote', r)
 
     }
@@ -279,20 +303,36 @@ test_up()
         console.log(err)
     })
 // ftp.ls {
-//   name: 'L1-DECL_20210805055044.csv',
-//   type: 0,
-//   time: 1692501180000,
-//   size: 1384928,
+//   name: 'test2',
+//   type: 1,
+//   time: 1692430740000,
+//   size: 0,
 //   owner: 'ftp',
 //   group: 'ftp',
-//   userPermissions: { read: true, write: true, exec: false },
-//   groupPermissions: { read: true, write: true, exec: false },
-//   otherPermissions: { read: true, write: true, exec: false },
-//   mtime: '2023-08-20T11:13:00+08:00',
-//   isFolder: false
-// } 3
+//   userPermissions: { read: true, write: true, exec: true },
+//   groupPermissions: { read: true, write: true, exec: true },
+//   otherPermissions: { read: true, write: true, exec: true },
+//   mtime: '2023-08-19T23:39:00+08:00',
+//   isFolder: true
+// } 1
+// ftp.stat {
+//   rmlst: { err: "Error: 550 Couldn't open the file or directory" },
+//   mtime: '',
+//   isFolder: false,
+//   isFile: false,
+//   rsize: { err: "Error: 550 Couldn't open the file or directory" },
+//   size: 0
+// }
+// ftp.stat {
+//   rmlst: { err: "Error: 550 Couldn't open the file or directory" },
+//   mtime: '',
+//   isFolder: false,
+//   isFile: false,
+//   rsize: { err: "Error: 550 Couldn't open the file or directory" },
+//   size: 0
+// }
 // ftp.isFile false
-// ftp.isFile true
+// ftp.isFile false
 // ftp.isFile false
 // ftp.isFile false
 // ftp.isFolder false
@@ -362,6 +402,9 @@ async function test_dw() {
         let fps = await ftp.ls('./_test_download_srv')
         console.log('ftp.ls', fps[0], fps.length)
 
+        r = await ftp.stat('./_test_download_srv/DECL_202108.csv')
+        console.log('ftp.stat', r)
+
         r = await ftp.isFile('./_test_download_srv/DECL_20210805055044.csv')
         console.log('ftp.isFile', r)
 
@@ -383,7 +426,7 @@ async function test_dw() {
 
         r = await ftp.syncToLocal('./_test_download_srv', './_test_download_client', (p) => {
             console.log('ftp.syncToLocal p', p.name, p.progress)
-        })
+        }, { forceOverwriteWhenSync: false })
         console.log('ftp.syncToLocal', r)
 
     }
@@ -405,15 +448,33 @@ test_dw()
 //   name: 'DECL_202108.csv',
 //   size: 218690,
 //   modifyTime: 1692347520000,
-//   accessTime: 1692517558000,
+//   accessTime: 1692692553000,
 //   rights: { user: 'rw', group: '***', other: '***' },
 //   owner: 0,
 //   group: 0,
 //   longname: '-rw-******    1 -        -          218690 Aug 18 16:32 DECL_202108.csv',
+//   atime: '2023-08-22T16:22:33+08:00',
 //   mtime: '2023-08-18T16:32:00+08:00',
-//   atime: '2023-08-20T15:45:58+08:00',
 //   isFolder: false
 // } 5
+// ftp.stat {
+//   mode: 33152,
+//   uid: 0,
+//   gid: 0,
+//   size: 218690,
+//   accessTime: 1692692553000,
+//   modifyTime: 1692347520000,
+//   isDirectory: false,
+//   isFile: true,
+//   isBlockDevice: false,
+//   isCharacterDevice: false,
+//   isSymbolicLink: false,
+//   isFIFO: false,
+//   isSocket: false,
+//   atime: '2023-08-22T16:22:33+08:00',
+//   mtime: '2023-08-18T16:32:00+08:00',
+//   name: './_test_download_srv/DECL_202108.csv'
+// }
 // ftp.isFile true
 // ftp.isFile true
 // ftp.isFolder false
@@ -626,8 +687,14 @@ async function test_up() {
 
     async function core() {
 
-        let fps = await ftp.ls('./_test_download_srv')
+        let fps = await ftp.ls('./_test_upload_srv')
         console.log('ftp.ls', fps[0], fps.length)
+
+        r = await ftp.stat('./_test_upload_srv/DECL_202108.csv')
+        console.log('ftp.stat', r)
+
+        r = await ftp.stat('./_test_upload_srv/L1-DECL_202108.csv')
+        console.log('ftp.stat', r)
 
         r = await ftp.isFile('./_test_upload_srv/DECL_20210805055044.csv')
         console.log('ftp.isFile', r)
@@ -659,7 +726,7 @@ async function test_up() {
 
         r = await ftp.syncToRemote('./_test_upload_client', './_test_upload_srv', (p) => {
             console.log('ftp.syncToRemote p', p.name, p.progress)
-        })
+        }, { forceOverwriteWhenSync: false })
         console.log('ftp.syncToRemote', r)
 
     }
@@ -677,24 +744,45 @@ test_up()
         console.log(err)
     })
 // ftp.ls {
-//   type: '-',
-//   name: 'DECL_202108.csv',
-//   size: 218690,
-//   modifyTime: 1692347520000,
-//   accessTime: 1692517558000,
-//   rights: { user: 'rw', group: '***', other: '***' },
+//   type: 'd',
+//   name: 'test2',
+//   size: 0,
+//   modifyTime: 1692529018000,
+//   accessTime: 1692692728000,
+//   rights: { user: 'rwx', group: '***', other: '***' },
 //   owner: 0,
 //   group: 0,
-//   longname: '-rw-******    1 -        -          218690 Aug 18 16:32 DECL_202108.csv',
-//   mtime: '2023-08-18T16:32:00+08:00',
-//   atime: '2023-08-20T15:45:58+08:00',
-//   isFolder: false
-// } 5
+//   longname: 'drwx******    1 -        -               0 Aug 20 18:56 test2',
+//   atime: '2023-08-22T16:25:28+08:00',
+//   mtime: '2023-08-20T18:56:58+08:00',
+//   isFolder: true
+// } 1
+// ftp.stat {
+//   err: 'Error: _xstat: No such file: ./_test_upload_srv/DECL_202108.csv'
+// }
+// ftp.stat {
+//   err: 'Error: _xstat: No such file: ./_test_upload_srv/L1-DECL_202108.csv'
+// }
 // ftp.isFile false
 // ftp.isFile false
 // ftp.isFile false
 // ftp.isFile false
 // ftp.isFolder false
+// Ftp.stat then {
+//   mode: 16832,
+//   uid: 0,
+//   gid: 0,
+//   size: 0,
+//   accessTime: 1692692728000,
+//   modifyTime: 1692529018000,
+//   isDirectory: true,
+//   isFile: false,
+//   isBlockDevice: false,
+//   isCharacterDevice: false,
+//   isSymbolicLink: false,
+//   isFIFO: false,
+//   isSocket: false
+// }
 // ftp.isFolder true
 // ftp.upload p L1-DECL_20210805055044.csv 2.3660435777166757
 // ftp.upload p L1-DECL_20210805055044.csv 4.7320871554333515
