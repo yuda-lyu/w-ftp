@@ -129,7 +129,13 @@ function CoreFTP(opt = {}) {
             clearTimeout(t)
 
             if (err) {
-                pm.reject(err)
+                //有些伺服器會回傳empty string(由jsftp.js提示), 故可能無法進行ls列舉, 且其回傳: Could not retrieve a file listing for ooo
+                if (get(err, 'code') === 451) {
+                    pm.resolve([]) //視為資料夾內無任何資料夾與檔案
+                }
+                else {
+                    pm.reject(err)
+                }
             }
             else {
                 res = map(res, (v) => {

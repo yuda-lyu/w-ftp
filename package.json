@@ -1,9 +1,9 @@
 {
   "name": "w-ftp",
-  "version": "1.0.11",
+  "version": "1.0.12",
   "main": "dist/w-ftp.umd.js",
   "dependencies": {
-    "dayjs": "^1.11.9",
+    "dayjs": "^1.11.10",
     "debug": "^4.3.4",
     "ftp-response-parser": "^1.0.1",
     "lodash": "^4.17.21",
@@ -12,10 +12,10 @@
     "ssh2-sftp-client": "^9.1.0",
     "stream-combiner": "^0.2.2",
     "unorm": "^1.6.0",
-    "wsemi": "^1.7.27"
+    "wsemi": "^1.7.38"
   },
   "devDependencies": {
-    "w-package-tools": "^1.0.69"
+    "w-package-tools": "^1.0.70"
   },
   "scripts": {
     "test": "mocha --parallel --timeout 60000 --experimental-modules --es-module-specifier-resolution=node",
