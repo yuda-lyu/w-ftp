@@ -14,7 +14,7 @@ To view documentation or get support, visit [docs](https://yuda-lyu.github.io/w-
 
 ## Installation
 ### Using npm(ES6 module):
-> **Note:** `w-ftp` is mainly dependent on the fork of `jsftp`, `ssh2-sftp-client`, `lodash` and `wsemi`.
+> **Note:** `w-ftp` is mainly dependent on the fork of `jsftp`, `ssh2-sftp-client`, `lodash-es` and `wsemi`.
 
 ```alias
 npm i w-ftp
