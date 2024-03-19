@@ -6,6 +6,7 @@ A tool for FTP(FTP, SFTP).
 [![license](https://img.shields.io/npm/l/w-ftp.svg?style=flat)](https://npmjs.org/package/w-ftp) 
 [![gzip file size](http://img.badgesize.io/yuda-lyu/w-ftp/master/dist/w-ftp.umd.js.svg?compression=gzip)](https://github.com/yuda-lyu/w-ftp)
 [![npm download](https://img.shields.io/npm/dt/w-ftp.svg)](https://npmjs.org/package/w-ftp) 
+[![npm download](https://img.shields.io/npm/dm/w-ftp.svg)](https://npmjs.org/package/w-ftp) 
 [![jsdelivr download](https://img.shields.io/jsdelivr/npm/hm/w-ftp.svg)](https://www.jsdelivr.com/package/npm/w-ftp)
 
 ## Documentation
