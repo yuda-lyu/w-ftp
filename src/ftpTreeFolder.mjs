@@ -1,4 +1,4 @@
-import get from 'lodash-es/get'
+import get from 'lodash-es/get.js'
 import ispint from 'wsemi/src/ispint.mjs'
 import getFileName from 'wsemi/src/getFileName.mjs'
 import pmSeries from 'wsemi/src/pmSeries.mjs'

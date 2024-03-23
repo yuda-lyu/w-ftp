@@ -1,5 +1,5 @@
-import get from 'lodash-es/get'
-import find from 'lodash-es/find'
+import get from 'lodash-es/get.js'
+import find from 'lodash-es/find.js'
 import iseobj from 'wsemi/src/iseobj.mjs'
 import isbol from 'wsemi/src/isbol.mjs'
 import isfun from 'wsemi/src/isfun.mjs'

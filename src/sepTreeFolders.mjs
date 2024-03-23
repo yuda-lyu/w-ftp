@@ -1,5 +1,5 @@
-import each from 'lodash-es/each'
-import dropRight from 'lodash-es/dropRight'
+import each from 'lodash-es/each.js'
+import dropRight from 'lodash-es/dropRight.js'
 import sep from 'wsemi/src/sep.mjs'
 import strleft from 'wsemi/src/strleft.mjs'
 import strdelleft from 'wsemi/src/strdelleft.mjs'
