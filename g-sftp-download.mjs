@@ -281,4 +281,4 @@ test_dw()
 // }
 // ftp.quit ok
 
-//node --experimental-modules --es-module-specifier-resolution=node g-sftp-download.mjs
+//node g-sftp-download.mjs

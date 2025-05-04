@@ -1,11 +1,17 @@
 import get from 'lodash-es/get.js'
 import ispint from 'wsemi/src/ispint.mjs'
+import isfun from 'wsemi/src/isfun.mjs'
 import getFileName from 'wsemi/src/getFileName.mjs'
 import pmSeries from 'wsemi/src/pmSeries.mjs'
 
 
 function ftpTreeFolder(fd, ftpLs, opt = {}) {
     let level = 1
+
+    //check
+    if (!isfun(ftpLs)) {
+        return Promise.reject(`ftpLs is not a function`)
+    }
 
     //levelLimit
     let levelLimit = get(opt, 'levelLimit')

@@ -188,4 +188,4 @@ test_dw()
 // }
 // ftp.quit { code: 221, text: '221 Goodbye.', isMark: false, isError: false }
 
-//node --experimental-modules --es-module-specifier-resolution=node g-ftp-download.mjs
+//node g-ftp-download.mjs

@@ -5,6 +5,7 @@ import map from 'lodash-es/map.js'
 import filter from 'lodash-es/filter.js'
 import join from 'lodash-es/join.js'
 import isfun from 'wsemi/src/isfun.mjs'
+import ispint from 'wsemi/src/ispint.mjs'
 import strleft from 'wsemi/src/strleft.mjs'
 import sep from 'wsemi/src/sep.mjs'
 import strdelleft from 'wsemi/src/strdelleft.mjs'
@@ -15,15 +16,21 @@ import ftpTreeFolder from './ftpTreeFolder.mjs'
 
 async function ftpTreeFilesInLocalAndRemote(fdRemote, fdLocal, opt = {}) {
 
+    //check fdLocal
+    if (!fsIsFolder(fdLocal)) {
+        return Promise.reject(`fdLocal[${fdLocal}] is not a folder`)
+    }
+
     //ftpLs
     let ftpLs = get(opt, 'ftpLs')
     if (!isfun(ftpLs)) {
         return Promise.reject(`opt.ftpLs is not a function`)
     }
 
-    //check fdLocal
-    if (!fsIsFolder(fdLocal)) {
-        return Promise.reject(`fdLocal[${fdLocal}] is not a folder`)
+    //levelLimit
+    let levelLimit = get(opt, 'levelLimit')
+    if (!ispint(levelLimit)) {
+        levelLimit = null
     }
 
     //path.resolve
@@ -61,7 +68,7 @@ async function ftpTreeFilesInLocalAndRemote(fdRemote, fdLocal, opt = {}) {
     }
 
     //fsLocal
-    let fsLocal = fsTreeFolder(fdLocal, null)
+    let fsLocal = fsTreeFolder(fdLocal, levelLimit)
     fsLocal = filter(fsLocal, (v) => {
         return !v.isFolder
     })
@@ -93,7 +100,7 @@ async function ftpTreeFilesInLocalAndRemote(fdRemote, fdLocal, opt = {}) {
     }
 
     //fsRemote
-    let fsRemote = await ftpTreeFolder(fdRemote, ftpLs)
+    let fsRemote = await ftpTreeFolder(fdRemote, ftpLs, { levelLimit })
     fsRemote = filter(fsRemote, (v) => {
         return !v.isFolder
     })

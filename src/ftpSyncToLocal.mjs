@@ -2,6 +2,7 @@ import get from 'lodash-es/get.js'
 import find from 'lodash-es/find.js'
 import iseobj from 'wsemi/src/iseobj.mjs'
 import isbol from 'wsemi/src/isbol.mjs'
+import ispint from 'wsemi/src/ispint.mjs'
 import isfun from 'wsemi/src/isfun.mjs'
 import pmSeries from 'wsemi/src/pmSeries.mjs'
 import fsIsFolder from 'wsemi/src/fsIsFolder.mjs'
@@ -10,12 +11,6 @@ import ftpTreeFilesInLocalAndRemote from './ftpTreeFilesInLocalAndRemote.mjs'
 
 
 async function ftpSyncToLocal(fdRemote, fdLocal, cbProcess, opt = {}) {
-
-    //forceOverwriteWhenSync
-    let forceOverwriteWhenSync = get(opt, 'forceOverwriteWhenSync')
-    if (!isbol(forceOverwriteWhenSync)) {
-        forceOverwriteWhenSync = false
-    }
 
     //ftpLs
     let ftpLs = get(opt, 'ftpLs')
@@ -29,13 +24,25 @@ async function ftpSyncToLocal(fdRemote, fdLocal, cbProcess, opt = {}) {
         return Promise.reject(`opt.ftpDownload is not a function`)
     }
 
+    //forceOverwriteWhenSync
+    let forceOverwriteWhenSync = get(opt, 'forceOverwriteWhenSync')
+    if (!isbol(forceOverwriteWhenSync)) {
+        forceOverwriteWhenSync = false
+    }
+
+    //levelLimit
+    let levelLimit = get(opt, 'levelLimit')
+    if (!ispint(levelLimit)) {
+        levelLimit = null
+    }
+
     //check fdLocal
     if (!fsIsFolder(fdLocal)) {
         fsCreateFolder(fdLocal)
     }
 
     //ftpTreeFilesInLocalAndRemote
-    let r = await ftpTreeFilesInLocalAndRemote(fdRemote, fdLocal, { ftpLs })
+    let r = await ftpTreeFilesInLocalAndRemote(fdRemote, fdLocal, { ftpLs, levelLimit })
     let fsRemote = r.fsRemote
     let fsLocal = r.fsLocal
     // console.log('fsRemote', fsRemote)

@@ -299,4 +299,4 @@ test_up()
 // }
 // ftp.quit ok
 
-//node --experimental-modules --es-module-specifier-resolution=node g-sftp-upload.mjs
+//node g-sftp-upload.mjs

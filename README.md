@@ -4,7 +4,6 @@ A tool for FTP(FTP, SFTP).
 ![language](https://img.shields.io/badge/language-JavaScript-orange.svg) 
 [![npm version](http://img.shields.io/npm/v/w-ftp.svg?style=flat)](https://npmjs.org/package/w-ftp) 
 [![license](https://img.shields.io/npm/l/w-ftp.svg?style=flat)](https://npmjs.org/package/w-ftp) 
-[![gzip file size](http://img.badgesize.io/yuda-lyu/w-ftp/master/dist/w-ftp.umd.js.svg?compression=gzip)](https://github.com/yuda-lyu/w-ftp)
 [![npm download](https://img.shields.io/npm/dt/w-ftp.svg)](https://npmjs.org/package/w-ftp) 
 [![npm download](https://img.shields.io/npm/dm/w-ftp.svg)](https://npmjs.org/package/w-ftp) 
 [![jsdelivr download](https://img.shields.io/jsdelivr/npm/hm/w-ftp.svg)](https://www.jsdelivr.com/package/npm/w-ftp)
@@ -14,8 +13,6 @@ To view documentation or get support, visit [docs](https://yuda-lyu.github.io/w-
 
 ## Installation
 ### Using npm(ES6 module):
-> **Note:** `w-ftp` is mainly dependent on the fork of `jsftp`, `ssh2-sftp-client`, `lodash-es` and `wsemi`.
-
 ```alias
 npm i w-ftp
 ```
