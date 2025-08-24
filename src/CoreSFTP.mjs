@@ -82,9 +82,9 @@ function CoreSFTP(opt = {}) {
             // debug: (msg) => {
             //     console.log('debug', msg)
             // },
-            // retries: 2, // integer. Number of times to retry connecting
-            // retry_factor: 2, // integer. Time factor used to calculate time between retries
-            // retry_minTimeout: 2000, // integer. Minimum timeout between attempts
+            // retries: 2, // integer. Number of times to retry connecting //ssh2-sftp-client 12.0.0以上版本已刪除retry功能
+            // retry_factor: 2, // integer. Time factor used to calculate time between retries //ssh2-sftp-client 12.0.0以上版本已刪除retry功能
+            // retry_minTimeout: 2000, // integer. Minimum timeout between attempts //ssh2-sftp-client 12.0.0以上版本已刪除retry功能
         })
         // console.log('Ftp(connect)', Ftp)
 

@@ -529,7 +529,7 @@ async function pwd(fpRemote) {
  * @param {Object} [opt={}] 輸入設定物件，預設{}
  * @param {String} [opt.transportation='FTP'] 輸入傳輸協定字串，可選'FTP'、'SFTP'，預設'FTP'
  * @param {String} [opt.hostname=''] 輸入hostname字串，預設''
- * @param {Number} [opt.port=21|22] 輸入port正整數，當transportation='FTP'預設21，當transportation='SFTP'預設22
+ * @param {Integer} [opt.port=21|22] 輸入port正整數，當transportation='FTP'預設21，當transportation='SFTP'預設22
  * @param {String} [opt.username=''] 輸入帳號字串，預設''
  * @param {String} [opt.password=''] 輸入密碼字串，預設''
  * @returns {Object} 回傳FTP操作物件，包含conn、ls、stat、isFile、download、syncToLocal、syncToRemote、upload、quit。
