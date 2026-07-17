@@ -55,11 +55,11 @@ describe('api-sftp-flow', function() {
     it('ls: 列舉根目錄之檔案與資料夾', async function() {
         let rs = await ftp.ls('.')
         rs = rs.map((v) => {
-            return { name: v.name, size: v.size, isFolder: v.isFolder }
+            return { name: v.name, size: v.isFolder ? null : v.size, isFolder: v.isFolder } //資料夾之size隨平台而異(ext4為4096, NTFS為0), 無語義不列入比對
         })
         rs.sort((a, b) => a.name.localeCompare(b.name))
         assert.strict.deepEqual(rs, [
-            { name: 'sub', size: 0, isFolder: true },
+            { name: 'sub', size: null, isFolder: true },
             { name: 't1.txt', size: 7, isFolder: false },
             { name: 't2.txt', size: 9, isFolder: false },
         ])
