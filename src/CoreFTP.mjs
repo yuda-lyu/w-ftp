@@ -163,14 +163,34 @@ function CoreFTP(opt = {}) {
             return pm
         }
 
-        //timeLimit
-        let t = setTimeout(() => {
+        //hardDestroy, jsftp的destroy對socket僅做end()軟關閉, 對端不回FIN時socket殘留使行程無法退出, 故須於destroy前先取出socket參照再硬關閉
+        let hardDestroy = () => {
+
+            //socket, destroy內會將socket與_pasvSocket設為undefined, 故須先取出參照
+            let s = Ftp.socket
+            let ps = Ftp._pasvSocket
 
             //destroy
             Ftp.destroy()
 
+            //destroy sockets
+            if (s) {
+                s.destroy()
+            }
+            if (ps) {
+                ps.destroy()
+            }
+
             //clear
             Ftp = null
+
+        }
+
+        //timeLimit
+        let t = setTimeout(() => {
+
+            //hardDestroy
+            hardDestroy()
 
             pm.reject(`ftpQuit timeout[${timeLimit}]`)
         }, timeLimit)
@@ -180,11 +200,13 @@ function CoreFTP(opt = {}) {
             //clearTimeout
             clearTimeout(t)
 
-            //destroy
-            Ftp.destroy()
+            //check, 逾時路徑硬關閉socket後可能觸發jsftp回調此處, 此時Ftp已清空且pm已reject, 直接返回
+            if (Ftp === null) {
+                return
+            }
 
-            //clear
-            Ftp = null
+            //hardDestroy
+            hardDestroy()
 
             if (err) {
                 pm.reject(err)
