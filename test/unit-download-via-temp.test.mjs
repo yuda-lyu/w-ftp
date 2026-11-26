@@ -117,6 +117,153 @@ describe('unit-download-via-temp', function() {
 
     })
 
+    describe('opt讀取(經wsemi getOptReader, 規則R-OPT-01)', function() {
+
+        //transferSeen, 傳輸替身: 記錄暫存檔所在資料夾後寫入內容
+        let transferSeen = (seen) => {
+            return async (fpTemp) => {
+                seen.fd = path.dirname(fpTemp)
+                await fs.promises.writeFile(fpTemp, buf)
+            }
+        }
+
+        //optThrow, 以base為底, keys內之鍵為讀取即拋錯之存取器、其餘鍵正常之opt
+        let optThrow = (base, keys) => {
+            let o = { ...base }
+            for (let k of keys) {
+                Object.defineProperty(o, k, {
+                    enumerable: true,
+                    get: () => {
+                        throw new Error('read denied')
+                    },
+                })
+            }
+            return o
+        }
+
+        //fdOptOf, 本檔各案專用之opt.fdDownloadTemp資料夾
+        let fdOptOf = (name) => {
+            let fd = `${fdBase}/temp-opt-${name}`
+            w.fsCleanFolder(fd)
+            return fd
+        }
+
+        it('opt.onTrace讀取拋錯(其餘鍵正常): 視為未給而不拋錯, 不送事件, 暫存區仍取opt.fdDownloadTemp', async function() {
+            let fp = prepOut('o1')
+            let fdOpt = fdOptOf('o1')
+            let seen = {}
+            let r = await settleWithin(run(fp, transferSeen(seen), { optCall: optThrow({ fdDownloadTemp: fdOpt }, ['onTrace']) }), 5000)
+            assert.strict.ok(r.ok && r.value === 'ok', '單一鍵讀取拋錯不得使下載失敗') //規格: 讀取拋錯視為未給(輸入參數之檢測機制K3)
+            assert.strict.ok(seen.fd === path.resolve(fdOpt), '其餘鍵須照常生效: 暫存區須取opt.fdDownloadTemp')
+            assertFile(fp, buf, '目標須為新內容')
+        })
+
+        it('opt.fdDownloadTemp讀取拋錯(其餘鍵正常): 視為未給而用實例暫存區, onTrace事件照常送出', async function() {
+            let fp = prepOut('o2')
+            let rec = recorder()
+            let seen = {}
+            let r = await settleWithin(run(fp, transferSeen(seen), { optCall: optThrow({ onTrace: rec.onTrace }, ['fdDownloadTemp']) }), 5000)
+            assert.strict.ok(r.ok && r.value === 'ok', '單一鍵讀取拋錯不得使下載失敗')
+            assert.strict.ok(seen.fd === path.resolve(fdTemp), '須用實例層級暫存區')
+            assert.strict.deepEqual(rec.evs.map((e) => e.type), ['sweep', 'temp', 'transfer', 'verify', 'move'])
+            assertFile(fp, buf, '目標須為新內容')
+        })
+
+        it('opt非物件非函數(undefined、null、數字、字串、布林、bigint、symbol): 各鍵視為未給, 用實例暫存區, 不送事件, 不拋錯', async function() {
+            let n = 0
+            for (let v of [undefined, null, 0, 123, 'abc', true, 10n, Symbol('s')]) {
+                let fp = prepOut(`o3-${n++}`)
+                let seen = {}
+                let r = await settleWithin(run(fp, transferSeen(seen), { optCall: v }), 5000)
+                assert.strict.ok(r.ok && r.value === 'ok', `輸入[${typeof v}]不得使下載失敗`)
+                assert.strict.ok(seen.fd === path.resolve(fdTemp), `輸入[${typeof v}]須用實例層級暫存區`)
+                assertFile(fp, buf, '目標須為新內容')
+            }
+        })
+
+        it('opt為函數(可帶屬性): 其屬性照常讀取', async function() {
+            let fp = prepOut('o4')
+            let fdOpt = fdOptOf('o4')
+            let rec = recorder()
+            let optFn = Object.assign(() => {}, { fdDownloadTemp: fdOpt, onTrace: rec.onTrace })
+            let seen = {}
+            let r = await settleWithin(run(fp, transferSeen(seen), { optCall: optFn }), 5000)
+            assert.strict.ok(r.ok && r.value === 'ok', '函數型opt不得使下載失敗')
+            assert.strict.ok(seen.fd === path.resolve(fdOpt), '函數型opt之fdDownloadTemp須生效')
+            assert.strict.deepEqual(rec.evs.map((e) => e.type), ['sweep', 'temp', 'transfer', 'verify', 'move'])
+        })
+
+        it('接線: opt經wsemi getOptReader讀取(其於呼叫時讀opt.debug; opt.debug恰為true時才讀opt.funLog), 且只讀onTrace、fdDownloadTemp與debug', async function() {
+            let keysOf = async (base) => {
+                let reads = []
+                let optCall = new Proxy(base, {
+                    get: (t, k) => {
+                        reads.push(String(k))
+                        return t[k]
+                    },
+                })
+                let fp = prepOut('o5')
+                let r = await settleWithin(run(fp, writeAll(), { optCall }), 5000)
+                assert.strict.ok(r.ok && r.value === 'ok', '須成功')
+                return reads
+            }
+            let rec = recorder()
+            let reads1 = await keysOf({ onTrace: rec.onTrace })
+            assert.strict.ok(reads1.includes('debug'), 'getOptReader於呼叫時須讀opt.debug(證明經wsemi讀取器取值)')
+            assert.strict.ok(!reads1.includes('funLog'), 'opt.debug非true時不得讀opt.funLog')
+            assert.strict.ok(reads1.includes('onTrace') && reads1.includes('fdDownloadTemp'), '須讀onTrace與fdDownloadTemp')
+            assert.strict.ok(reads1.every((k) => ['debug', 'onTrace', 'fdDownloadTemp'].includes(k)), '不得讀其他鍵')
+            let reads2 = await keysOf({ debug: true, funLog: () => {} })
+            assert.strict.ok(reads2.includes('funLog'), 'opt.debug為true時須讀opt.funLog(由getOptReader接管)')
+        })
+
+        //findOwnReaders, 掃描原始碼中自寫之opt讀取器: 名為readKey/pickOpt/readOpt/optReader之函數或變數, 或「typeof x === 'object' && x !== null」之物件判斷寫法(自寫讀取器之慣用寫法)
+        let findOwnReaders = (src) => {
+            let hits = []
+            let re1 = /(?:\bfunction\s+(?:readKey|pickOpt|readOpt|optReader)\b|\b(?:let|const|var)\s+(?:readKey|pickOpt|readOpt|optReader)\s*=)/g
+            let re2 = /typeof\s+(\w+)\s*===\s*'object'\s*&&\s*\1\s*!==\s*null/g
+            for (let re of [re1, re2]) {
+                for (let m of src.matchAll(re)) {
+                    hits.push(m[0])
+                }
+            }
+            return hits
+        }
+
+        it('規則R-OPT-01: 本庫src不自寫opt讀取器, downloadViaTemp經wsemi getOptReader取值(掃描器先以正例自測)', function() {
+            //盲點自測: 掃描器須抓得到自寫讀取器之各種寫法, 且不誤抓一般判斷
+            let positives = [
+                'function readKey(opt, key) {\n    try {\n        if ((typeof opt === \'object\' && opt !== null) || typeof opt === \'function\') {',
+                'function pickOpt(opt, key) {',
+                'const readOpt = (opt, key) => opt[key]',
+                'let optReader = {}',
+                'if (typeof o === \'object\' && o !== null) { return o[k] }',
+            ]
+            for (let s of positives) {
+                assert.strict.ok(findOwnReaders(s).length > 0, `掃描器須抓到自寫讀取器之寫法: ${s.slice(0, 30)}`)
+            }
+            let negatives = ['let a = typeof x === \'object\'', 'function readKeys() {}', 'let readKeyMap = 1']
+            for (let s of negatives) {
+                assert.strict.ok(findOwnReaders(s).length === 0, `掃描器不得誤抓: ${s}`)
+            }
+            //掃描全部src(印出檔數, 為0或偏少即範圍壞了)
+            let files = fs.readdirSync('./src').filter((f) => f.endsWith('.mjs'))
+            assert.strict.ok(files.length >= 9, `掃描檔數須不少於9(實際${files.length})`)
+            let hitsAll = []
+            for (let f of files) {
+                for (let h of findOwnReaders(fs.readFileSync(`./src/${f}`, 'utf8'))) {
+                    hitsAll.push(`${f}: ${h.slice(0, 40)}`)
+                }
+            }
+            assert.strict.ok(hitsAll.length === 0, `src不得自寫opt讀取器: ${hitsAll.join(' | ')}`)
+            //接線: downloadViaTemp匯入並使用wsemi getOptReader
+            let srcDl = fs.readFileSync('./src/downloadViaTemp.mjs', 'utf8')
+            assert.strict.ok(/import getOptReader from 'wsemi\/src\/getOptReader\.mjs'/.test(srcDl), 'downloadViaTemp須匯入wsemi getOptReader')
+            assert.strict.ok((srcDl.match(/getOptReader\('w-ftp downloadViaTemp', \w+\)/g) || []).length >= 2, 'onTrace與fdDownloadTemp皆須經getOptReader讀取')
+        })
+
+    })
+
     describe('流程與移動', function() {
 
         it('成功: 內容由暫存區改名取代舊檔, 事件依序sweep,temp,transfer,verify,move', async function() {

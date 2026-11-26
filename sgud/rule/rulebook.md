@@ -28,3 +28,11 @@
 已知限制(不修):遠端之檔本身為半截(遠端回報之大小即半截)時擋不住;FTP 於伺服器回 150 之前逾時時尚無數據連線可銷毀,控制連線仍等該指令之回覆,同一實例之後續指令排在其後,須 `quit` 再 `conn`;SFTP `fastGet` 逾時後無法中止,quit 斷線後背景傳輸可能不再結束(暫存檔名已於逾時時刪除,若本地檔於逾時後才被重新開啟則殘檔由 R-DL-05 於 24 小時後清);`syncToLocal` 遇第一個失敗即停,已下載者保留;跨磁碟之實機驗證須暫存區與目標位於不同磁碟(本機單碟時略過,`EXDEV` 以替身驗證).
 
 測試指令:`npx mocha --no-parallel test/unit-download-via-temp.test.mjs test/api-sftp-download-temp.test.mjs test/api-ftp-download-temp.test.mjs --timeout 180000`;全套 `npm test`.
+
+## 單次呼叫 opt 之讀取(wsemi 1.9.82 起之 `getOptReader`)
+
+需求出處:wsemi 1.9.82 起公開 `getOptReader(tag, opt)`(輸入參數之檢測機制規格 §7:opt 之取值〔讀取拋錯視為未給〕、種類檢測、`opt.debug` 警告之單一擁有者為 wsemi),自有套件各自寫之 opt 讀取收斂改用.單一擁有者:wsemi `getOptReader`;本庫不自寫 opt 讀取器.
+
+| 規則 | 內容 | 站點全集與盤點 | 測試 |
+|---|---|---|---|
+| R-OPT-01 單次呼叫 opt 一律經 wsemi `getOptReader` 取值 | `downloadViaTemp` 之 `onTrace`(經 `traceOf`)與 `fdDownloadTemp` 以 `getOptReader('w-ftp downloadViaTemp', optCall).read(鍵)` 讀取:opt 非物件非函數、讀取拋錯(存取器、已撤銷之 Proxy)皆視為未給(不拋錯),函數型 opt 之屬性照常讀;本庫只用 `.read`(不檢測、不警告,檢測由下游 `getTrace`、`resolveFdTemp` 負責),故 `opt.debug`、`opt.funLog` 於本庫無警告出口、無字樣差異;不得再自寫 `readKey` 一類讀取器(本輪已刪 `readKey`) | `git grep -nE "function (readKey\|pickOpt\|readOpt\|optReader)\b\|typeof \w+ === 'object' && \w+ !== null" -- src` 應為 0 處;`git grep -n "getOptReader" -- src` 應為 `downloadViaTemp.mjs` 之 1 處匯入、2 處呼叫(另 1 行註解,2026-11-27).刻意不套:`CoreFTP`、`CoreSFTP` 建構時以 lodash `get(opt, 鍵)` 讀 WFtp 設定(建構設定,非單次呼叫 opt,另案) | `test/unit-download-via-temp.test.mjs` 之 `opt讀取(經wsemi getOptReader, 規則R-OPT-01)` 6 案.變異(2026-11-27,鏡像根注入,跑該檔,修後 30 passing):`fdDownloadTemp` 站不經讀取器直取、鍵名誤寫、不傳入 opt,`onTrace` 站鍵名誤寫、不傳入 opt,兩站各改回自寫之 try/catch(拿掉接線),tag 改字樣,共 8 項全被殺(失敗 4/3/4/12/13/1/1/1 案);修前鏡像 28 passing、2 failing(接線案與掃描案) |

@@ -21,3 +21,10 @@
 - **暫存檔名比目標檔名多約 20 個字元**,目標檔名接近 255 時會 `ENAMETOOLONG`(Windows NTFS 以 UTF-16 單位計、POSIX 以位元組計);基底以碼點截短至 150 位元組.
 - **不必另設而被其他判斷涵蓋之檢查**(例:清殘檔時之「非本行程所有」被「行程已不存在」涵蓋,本行程必然存在)之變異必然存活且無法補案,應直接刪除該檢查而不是補測試.
 - **Windows 上改名取代既有檔可能遇防毒占用**(`EPERM`/`EBUSY`/`EACCES`):移動採有界重試(共 5 次嘗試,間隔 200×次數毫秒),目標為資料夾時 `rename` 亦回 `EPERM`,須先判斷以免白等重試.
+
+## opt 讀取收斂至 wsemi `getOptReader`(2026-11-27,wsemi 1.9.82)
+
+- **只用 `.read` 之站點,`tag` 與 `opt.debug`、`opt.funLog` 皆不可由行為觀察**:`getOptReader` 之警告只在 `rd(key, def, check, …)` 檢測未過時才出,`.read(key)` 不檢測不警告;本庫(`downloadViaTemp`)只讀 `onTrace`、`fdDownloadTemp` 之原值,檢測交下游(`getTrace`、`resolveFdTemp`).故「接線」之行為證據取 `getOptReader` 於呼叫時必讀 `opt.debug` 一次(以 Proxy 記錄讀取之鍵,`debug` 非 true 時不讀 `funLog`),`tag` 只能以原始碼掃描釘住.
+- **`traceOf` 外層之 `try/catch` 會遮掩 `onTrace` 站「改回直取」之變異**(直取拋錯被 `traceOf` 自己吞掉而回 `null`,行為與經讀取器同);要驗讀取拋錯視為未給,須以 `fdDownloadTemp` 站(外層無 `try/catch`)與非物件 opt(`undefined`、`null`)之案.
+- **變異鏡像根放 repo 之 `./tmp/` 下即可解析上層 `node_modules`**(不必建目錄連結):測試以該鏡像根為工作目錄、mocha 以 repo 之絕對路徑啟動.
+
