@@ -7,6 +7,25 @@ let { Server, utils } = ssh2
 let { STATUS_CODE } = utils.sftp
 
 
+//hostKey, 主機金鑰於行程內只產生一次並共用;
+//ssh2之utils.generateKeyPairSync('ed25519')所產私鑰偶有無法解析者(實測5000次中14次'Malformed OpenSSH private key', ssh2 1.17.0), 此時new Server拋錯而測試偶發失敗,
+//故產生後以utils.parseKey驗證, 不可解析者重產(有界)
+let hostKey = null
+let getHostKey = () => {
+    if (hostKey !== null) {
+        return hostKey
+    }
+    for (let i = 0; i < 20; i++) {
+        let kp = utils.generateKeyPairSync('ed25519')
+        if (!(utils.parseKey(kp.private) instanceof Error)) {
+            hostKey = kp.private
+            return hostKey
+        }
+    }
+    throw new Error('can not generate a parsable host key')
+}
+
+
 /**
  * 啟動測試用之假SFTP伺服器，供測試連線與下載檔案
  *
@@ -19,6 +38,11 @@ let { STATUS_CODE } = utils.sftp
  * @param {String} [opt.username='u1'] 輸入允許登入之帳號字串，預設'u1'
  * @param {String} [opt.password='p1'] 輸入允許登入之密碼字串，預設'p1'
  * @param {Integer} [opt.port=0] 輸入監聽port正整數，預設0代表由系統指派可用port
+ * @param {Object} [opt.hooks={}] 輸入測試用之攔截函數物件，未給之鍵行為同原版，預設{}
+ * @param {Function} [opt.hooks.READ] 輸入READ攔截函數，收到{ handle, offset, len, client, respond }，handle為該檔開啟代號字串(每次OPEN不同)，呼叫respond()即依原版回應；可延後呼叫(模擬停滯)、或不呼叫而以client.end()斷線(模擬傳輸中途斷線)
+ * @param {Function} [opt.hooks.OPEN] 輸入OPEN攔截函數，收到{ client, respond }，呼叫respond()即依原版回應；可延後呼叫(模擬停滯於開啟遠端檔)
+ * @param {Function} [opt.hooks.STAT] 輸入STAT與LSTAT攔截函數，收到{ client, path, respond }，呼叫respond()即依原版回應；可延後呼叫(模擬停滯於查詢遠端檔案資訊)
+ * @param {Function} [opt.hooks.statSize] 輸入STAT與LSTAT回報大小之改寫函數，收到(實際大小, 客戶端路徑)回傳回報大小(FSTAT不改寫)，供模擬遠端回報大小與實際傳輸大小不符
  * @returns {Promise} 回傳Promise，resolve回傳伺服器物件，內含實際監聽port正整數與關閉伺服器函數close
  */
 let fakeSftpServer = async(opt = {}) => {
@@ -35,8 +59,14 @@ let fakeSftpServer = async(opt = {}) => {
     //port, 0代表由系統指派可用port, 供mocha平行測試時避免衝突
     let port = opt.port || 0
 
-    //hostKeys, 執行期即時生成
-    let kp = utils.generateKeyPairSync('ed25519')
+    //hooks
+    let hooks = opt.hooks || {}
+
+    //clients, 記錄連線中之客戶端, 供close時斷線(停滯情境之客戶端未quit時, 不斷線則server.close不結束)
+    let clients = new Set()
+
+    //hostKeys, 執行期即時生成(行程內共用, 見getHostKey)
+    let hk = getHostKey()
 
     //toReal, 將客戶端路徑轉為根目錄內實體路徑, 並限制不可逃逸至根目錄外
     let toReal = (p) => {
@@ -56,7 +86,7 @@ let fakeSftpServer = async(opt = {}) => {
     }
 
     //bindSftp
-    let bindSftp = (sftp) => {
+    let bindSftp = (sftp, client) => {
 
         //handles, 記錄已開啟之資料夾與檔案
         let handles = {}
@@ -64,12 +94,23 @@ let fakeSftpServer = async(opt = {}) => {
 
         //onStat, STAT與LSTAT行為相同, 因不支援連結檔
         let onStat = (id, p) => {
-            try {
-                sftp.attrs(id, toAttrs(fs.statSync(toReal(p))))
+            let respond = () => {
+                try {
+                    let attrs = toAttrs(fs.statSync(toReal(p)))
+                    if (typeof hooks.statSize === 'function' && fs.statSync(toReal(p)).isFile()) {
+                        attrs.size = hooks.statSize(attrs.size, p)
+                    }
+                    sftp.attrs(id, attrs)
+                }
+                catch (err) {
+                    sftp.status(id, STATUS_CODE.NO_SUCH_FILE)
+                }
             }
-            catch (err) {
-                sftp.status(id, STATUS_CODE.NO_SUCH_FILE)
+            if (typeof hooks.STAT === 'function') {
+                hooks.STAT({ client, path: p, respond })
+                return
             }
+            respond()
         }
 
         sftp.on('REALPATH', (id, p) => {
@@ -119,16 +160,23 @@ let fakeSftpServer = async(opt = {}) => {
         })
 
         sftp.on('OPEN', (id, p) => {
-            try {
-                let fd = fs.openSync(toReal(p), 'r') //唯讀
-                let key = `f${nHandle}`
-                nHandle += 1
-                handles[key] = { type: 'file', fd }
-                sftp.handle(id, Buffer.from(key))
+            let respond = () => {
+                try {
+                    let fd = fs.openSync(toReal(p), 'r') //唯讀
+                    let key = `f${nHandle}`
+                    nHandle += 1
+                    handles[key] = { type: 'file', fd }
+                    sftp.handle(id, Buffer.from(key))
+                }
+                catch (err) {
+                    sftp.status(id, STATUS_CODE.NO_SUCH_FILE)
+                }
             }
-            catch (err) {
-                sftp.status(id, STATUS_CODE.NO_SUCH_FILE)
+            if (typeof hooks.OPEN === 'function') {
+                hooks.OPEN({ client, respond })
+                return
             }
+            respond()
         })
 
         sftp.on('READ', (id, h, offset, len) => {
@@ -137,11 +185,18 @@ let fakeSftpServer = async(opt = {}) => {
                 return sftp.status(id, STATUS_CODE.FAILURE)
             }
             let buf = Buffer.alloc(len)
-            let nRead = fs.readSync(hd.fd, buf, 0, len, offset)
-            if (nRead === 0) {
-                return sftp.status(id, STATUS_CODE.EOF)
+            let nRead = fs.readSync(hd.fd, buf, 0, len, offset) //先讀出, 延後回應時檔案已被關閉亦可回應
+            let respond = () => {
+                if (nRead === 0) {
+                    return sftp.status(id, STATUS_CODE.EOF)
+                }
+                sftp.data(id, buf.subarray(0, nRead))
             }
-            sftp.data(id, buf.subarray(0, nRead))
+            if (typeof hooks.READ === 'function') {
+                hooks.READ({ handle: h.toString(), offset, len, client, respond })
+                return
+            }
+            respond()
         })
 
         sftp.on('CLOSE', (id, h) => {
@@ -157,7 +212,11 @@ let fakeSftpServer = async(opt = {}) => {
     }
 
     //srv
-    let srv = new Server({ hostKeys: [kp.private] }, (client) => {
+    let srv = new Server({ hostKeys: [hk] }, (client) => {
+        clients.add(client)
+        client.on('close', () => {
+            clients.delete(client)
+        })
         client.on('authentication', (ctx) => {
             if (ctx.method === 'password' && ctx.username === username && ctx.password === password) {
                 ctx.accept()
@@ -173,7 +232,7 @@ let fakeSftpServer = async(opt = {}) => {
             client.on('session', (accept) => {
                 let session = accept()
                 session.on('sftp', (accept) => {
-                    bindSftp(accept())
+                    bindSftp(accept(), client)
                 })
             })
         })
@@ -185,8 +244,11 @@ let fakeSftpServer = async(opt = {}) => {
         srv.listen(port, '127.0.0.1', resolve)
     })
 
-    //close
+    //close, 先斷開仍連線之客戶端, 否則server.close等待其結束
     let close = async() => {
+        for (let c of clients) {
+            c.end()
+        }
         return new Promise((resolve) => {
             srv.close(resolve)
         })

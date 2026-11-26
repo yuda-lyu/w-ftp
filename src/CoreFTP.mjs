@@ -25,6 +25,7 @@ import Jsftp from 'jsftp'
 import sepTreeFolders from './sepTreeFolders.mjs'
 import ftpSyncToLocal from './ftpSyncToLocal.mjs'
 import ftpSyncToRemote from './ftpSyncToRemote.mjs'
+import downloadViaTemp from './downloadViaTemp.mjs'
 
 
 function CoreFTP(opt = {}) {
@@ -59,9 +60,15 @@ function CoreFTP(opt = {}) {
     //timeLimit
     let timeLimit = get(opt, 'timeLimit')
     if (!isnum(timeLimit)) {
-        timeLimit = 1 * 60 * 1000 //1hr
+        timeLimit = 1 * 60 * 1000 //1min, 預設60000毫秒; 下載自傳輸開始起計此時間, 大檔須自行給較大值
     }
     timeLimit = cint(timeLimit)
+    if (!(timeLimit > 0)) {
+        timeLimit = 1 * 60 * 1000 //0與負數視為未給(setTimeout會把它當作1毫秒而使操作立即逾時), 改用預設
+    }
+
+    //fdDownloadTemp, 實例層級之下載暫存區, 非空字串才採用, 否則用預設, 於建構時轉絕對路徑
+    let fdDownloadTemp = downloadViaTemp.resolveFdTemp(get(opt, 'fdDownloadTemp'), downloadViaTemp.fdTempDefault)
 
 
     async function ftpConn() {
@@ -495,7 +502,7 @@ function CoreFTP(opt = {}) {
     }
 
 
-    async function ftpDownload(fpRemote, fpLocal, cbProcess = null) {
+    async function ftpDownload(fpRemote, fpLocal, cbProcess = null, optCall = {}) {
 
         //pm
         let pm = genPm()
@@ -522,10 +529,7 @@ function CoreFTP(opt = {}) {
         let fdLocal = path.dirname(fpLocal)
         // console.log('fdLocal', fdLocal)
 
-        //check fpLocal
-        if (fsIsFile(fpLocal)) {
-            fs.unlinkSync(fpLocal)
-        }
+        //舊fpLocal不先刪除, 下載完成並核對後才由暫存檔取代
 
         //check fdLocal
         if (!fsIsFolder(fdLocal)) {
@@ -555,93 +559,123 @@ function CoreFTP(opt = {}) {
         //fileSize
         let fileSize = get(file, 'size', '')
 
-        //check
-        if (!isnum(fileSize)) {
+        //check, 取不到遠端大小(如SIZE指令失敗, ftpStateTar此時回size為0)即無從核對是否下載完整, 預設拒絕
+        if (!isnum(fileSize) || haskey(get(file, 'rsize'), 'err')) {
             pm.reject(`can not get the size of file[${fpRemote}]`)
             return pm
         }
         fileSize = cint(fileSize)
         // console.log('fileSize', fileSize)
 
-        //timeLimit
-        let t = setTimeout(() => {
-            pm.reject(`ftpDownload timeout[${timeLimit}]`)
-        }, timeLimit)
+        //check, 查詢期間已quit
+        if (Ftp === null) {
+            pm.reject(`FTP has not been initialized. please use 'conn' to construct FTP`)
+            return pm
+        }
 
-        Ftp.get(fpRemote, (err, socket) => {
+        //Ftp, 固定本次所用之連線, 避免傳輸期間quit將Ftp設為null
+        let FtpNow = Ftp
 
-            //check
-            if (err) {
+        //downloadViaTemp, 先寫入暫存區, 傳輸成功且大小相符才移至fpLocal, 舊fpLocal於此之前不動; 逾時(timeLimit)自傳輸開始起計
+        //  數據socket關閉不代表傳完(連線中途正常關閉或被重置時jsftp皆不回報錯誤), 故完成與否以大小核對判定
+        return downloadViaTemp({
+            fpLocal,
+            fileSize,
+            timeLimit,
+            fdTempInst: fdDownloadTemp,
+            optCall,
+            transfer: (fpTemp, ctl) => {
+                return new Promise((resolve, reject) => {
 
-                //clearTimeout
-                clearTimeout(t)
+                    FtpNow.get(fpRemote, (err, socket) => {
 
-                pm.reject(err)
-                return
-            }
+                        //check, 取得數據socket失敗(如425)時尚未寫入任何內容
+                        if (err) {
+                            reject(err)
+                            return
+                        }
 
-            //createWriteStream
-            let writer = fs.createWriteStream(fpLocal)
+                        //check, 已逾時才取得socket者直接關閉, 不寫入
+                        if (!ctl.active()) {
+                            socket.destroy()
+                            reject(`ftpDownload timeout[${timeLimit}]`)
+                            return
+                        }
 
-            //socket data
-            let dss = 0
-            socket.on('data', (d) => {
-                // console.log('socket.on data', d)
+                        //setAbort, 逾時時銷毀數據socket以停止傳輸
+                        ctl.setAbort(() => {
+                            socket.destroy()
+                        })
 
-                //cbProcess
-                if (isfun(cbProcess)) {
-                    let ds = size(d)
-                    dss += ds
-                    let r = dss / fileSize * 100
-                    // console.log(`receving... ${dig((r), 1)}%`)
-                    cbProcess({
-                        progress: r,
-                        name: getFileName(fpLocal),
-                        fpRemote,
-                        fpLocal,
+                        //createWriteStream, 寫入暫存檔
+                        let writer = fs.createWriteStream(fpTemp)
+
+                        //errWriter
+                        let errWriter = null
+
+                        //數據socket之錯誤由jsftp監聽(取得socket後不再回報), 傳輸是否完整一律以大小核對判定
+
+                        //socket data
+                        let dss = 0
+                        socket.on('data', (d) => {
+                            // console.log('socket.on data', d)
+
+                            //cbProcess, 逾時後不再通知
+                            if (isfun(cbProcess) && ctl.active()) {
+                                let ds = size(d)
+                                dss += ds
+                                let r = dss / fileSize * 100
+                                // console.log(`receving... ${dig((r), 1)}%`)
+                                cbProcess({
+                                    progress: r,
+                                    name: getFileName(fpLocal),
+                                    fpRemote,
+                                    fpLocal,
+                                })
+                            }
+
+                            //write
+                            if (!writer.destroyed) {
+                                writer.write(d)
+                            }
+
+                        })
+
+                        //socket close
+                        socket.on('close', () => {
+                            // console.log('socket close')
+
+                            //end, 無數據時要呼叫end告知已結束
+                            if (!writer.destroyed) {
+                                writer.end()
+                            }
+
+                        })
+
+                        //writer error, 寫入失敗(如磁碟已滿)時停止接收
+                        writer.on('error', (e) => {
+                            errWriter = e
+                            socket.destroy()
+                        })
+
+                        //writer close, 檔案已關閉後才結束, 供核對大小與移動
+                        writer.on('close', () => {
+                            if (errWriter !== null) {
+                                reject(errWriter)
+                            }
+                            else {
+                                resolve()
+                            }
+                        })
+
+                        //resume
+                        socket.resume()
+
                     })
-                }
 
-                //write
-                writer.write(d)
-
-            })
-
-            //socket close
-            socket.on('close', () => {
-                // console.log('socket close')
-
-                //end, 無數據時要呼叫end告知已結束
-                writer.end()
-
-            })
-
-            //writer finish
-            writer.on('finish', () => {
-                // console.log('writer finish')
-
-                //clearTimeout
-                clearTimeout(t)
-
-                if (err) {
-                    pm.reject(err)
-                }
-                else {
-                    pm.resolve('ok')
-                }
-            })
-
-            //writer error
-            writer.on('error', (err) => {
-                console.log('writer error', err)
-            })
-
-            //resume
-            socket.resume()
-
+                })
+            },
         })
-
-        return pm
     }
 
 

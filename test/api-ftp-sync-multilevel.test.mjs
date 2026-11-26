@@ -48,6 +48,7 @@ describe('api-ftp-sync-multilevel', function() {
             username: 'u1',
             password: 'p1',
             timeLimit: 10000,
+            fdDownloadTemp: `${fdBase}/dltemp`, //下載暫存區(指定之, 免於cwd留下預設資料夾)
         })
         let r = await ftp.conn()
         assert.strict.deepEqual(r, 'ok')

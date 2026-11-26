@@ -15,12 +15,18 @@ import path from 'path'
  * @param {String} [opt.username='u1'] 輸入允許登入之帳號字串，預設'u1'
  * @param {String} [opt.password='p1'] 輸入允許登入之密碼字串，預設'p1'
  * @param {Integer} [opt.port=0] 輸入監聽port正整數，預設0代表由系統指派可用port
+ * @param {Object} [opt.hooks={}] 輸入測試用之攔截函數物件，未給之鍵行為同原版，預設{}
+ * @param {Function} [opt.hooks.SIZE] 輸入SIZE攔截函數，收到{ reply, size }：reply(text)回應控制連線一行，size為實際大小；供模擬SIZE指令失敗(如550)之伺服器
+ * @param {Function} [opt.hooks.RETR] 輸入RETR攔截函數(可為async)，收到{ data, reply, waitDs, closeDsrv }：data為檔案內容Buffer，reply(text)回應控制連線一行，waitDs()等待數據連線，closeDsrv()關閉數據伺服器；供模擬傳一半即正常關閉、停滯、425等情境
  * @returns {Promise} 回傳Promise，resolve回傳伺服器物件，內含實際監聽port正整數與關閉伺服器函數close
  */
 let fakeFtpServer = async (opt = {}) => {
 
     //mode
     let mode = opt.mode || 'normal'
+
+    //hooks
+    let hooks = opt.hooks || {}
 
     //fdRoot
     let fdRoot = path.resolve(opt.fdRoot || '.')
@@ -159,6 +165,10 @@ let fakeFtpServer = async (opt = {}) => {
                 socket.write('550 not a regular file\r\n')
                 return
             }
+            if (typeof hooks.SIZE === 'function') {
+                hooks.SIZE({ reply: (text) => socket.write(`${text}\r\n`), size: fs.statSync(rp).size })
+                return
+            }
             socket.write(`213 ${fs.statSync(rp).size}\r\n`)
         }
         else if (cmd === 'PASV') {
@@ -188,6 +198,17 @@ let fakeFtpServer = async (opt = {}) => {
             let rp = resolveP(state.cwd, arg)
             if (!fs.existsSync(rp) || fs.statSync(rp).isDirectory()) {
                 socket.write('550 no such file\r\n')
+                return
+            }
+            if (typeof hooks.RETR === 'function') {
+                await hooks.RETR({
+                    data: fs.readFileSync(rp),
+                    reply: (text) => {
+                        socket.write(`${text}\r\n`)
+                    },
+                    waitDs: () => waitDs(state),
+                    closeDsrv: () => closeDsrv(state),
+                })
                 return
             }
             socket.write('150 opening data connection\r\n')

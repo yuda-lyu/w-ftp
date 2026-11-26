@@ -36,6 +36,12 @@ async function ftpSyncToLocal(fdRemote, fdLocal, cbProcess, opt = {}) {
         levelLimit = null
     }
 
+    //optDownload, 轉交ftpDownload之單次呼叫設定(下載暫存區與觀察回調), 由ftpDownload檢測
+    let optDownload = {
+        fdDownloadTemp: get(opt, 'fdDownloadTemp'),
+        onTrace: get(opt, 'onTrace'),
+    }
+
     //check fdLocal
     if (!fsIsFolder(fdLocal)) {
         fsCreateFolder(fdLocal)
@@ -80,7 +86,7 @@ async function ftpSyncToLocal(fdRemote, fdLocal, cbProcess, opt = {}) {
         //ftpDownload
         if (!iseobj(fileLocal)) {
             //本地檔案不存在
-            await ftpDownload(fpRemote, fpLocal, cb)
+            await ftpDownload(fpRemote, fpLocal, cb, optDownload)
             n++
             ss.push({
                 path: fileRemote.rpath,
@@ -89,7 +95,7 @@ async function ftpSyncToLocal(fdRemote, fdLocal, cbProcess, opt = {}) {
         }
         else if (forceOverwriteWhenSync || (fileRemote.size !== fileLocal.size)) {
             //因無法對伺服器端檔案計算hash, 且儲存至本機的檔案變更時間為當時時間無法用以判斷, 暫時用本地檔案大小與遠端檔案大小檢測是否有變更
-            await ftpDownload(fpRemote, fpLocal, cb)
+            await ftpDownload(fpRemote, fpLocal, cb, optDownload)
             n++
             ss.push({
                 path: fileRemote.rpath,

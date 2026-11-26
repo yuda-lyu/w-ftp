@@ -11,6 +11,19 @@ A tool for FTP(FTP, SFTP).
 ## Documentation
 To view documentation or get support, visit [docs](https://yuda-lyu.github.io/w-ftp/global.html).
 
+## Download behavior
+`download` and `syncToLocal` (FTP and SFTP) never leave a partial file at the target:
+
+* **Temp folder first.** Each file is written to the download temp folder as `<name>.<pid>.<random>.part` and moved to the target only after the transfer ended successfully **and** the local size equals the remote size. If anything fails (connection lost, timeout, size mismatch, the file cannot be moved) the temp file is removed, the promise rejects and the existing target file is left untouched (it is no longer deleted before the download). For FTP the remote size is taken from the `SIZE` command; if the server cannot report it, the download is rejected because completeness cannot be verified.
+* **`fdDownloadTemp`** selects the temp folder: `WFtp({ fdDownloadTemp })` for the instance, `download(..., { fdDownloadTemp })` or `syncToLocal(..., { fdDownloadTemp })` for a single call (the single call wins). The default is `./_wftpDownloadTemp`, resolved against the cwd when the instance is created and created on first use. Put it on the same disk as the targets (the move is then one rename; across disks the file is copied next to the target first); do not put it inside the folder given to `syncToLocal`.
+* **Move retry.** If renaming onto the target fails with `EPERM`, `EBUSY` or `EACCES` (e.g. antivirus scanning on Windows) it is retried up to 5 attempts in total; after that the temp file is removed and the promise rejects.
+* **Crash residue.** Files in the temp folder that follow the naming above, were not updated for 24 hours, and belong to a process that no longer exists are removed (at most once an hour per folder per process).
+* **`timeLimit`** (default `60000` ms) now also limits SFTP downloads. It is counted per file from the start of the transfer (SFTP also limits the query of the remote file information with the same value), so large files need a larger `timeLimit` (`0` and negative values are treated as unset and use the default). On timeout the promise rejects with `ftpDownload timeout[<timeLimit>]` and the temp file name is removed; FTP aborts the data connection, SFTP cannot abort `fastGet` and the background transfer only deletes its temp file when it ends. The same instance can be `quit()` and `conn()` again for a retry.
+* **SFTP `syncToLocal`** now forwards its 4th argument like FTP does, so `levelLimit`, `forceOverwriteWhenSync`, `fdDownloadTemp` and `onTrace` take effect. `syncToLocal` still stops at the first file that fails.
+* **`onTrace`** (single call option of `download` and `syncToLocal`) receives frozen events `{ type, ... }` (`sweep`, `temp`, `timeout`, `transfer`, `verify`, `retry`, `move`; see the JSDoc of `download`) for diagnostics and event-driven tests; errors it throws are ignored.
+
+The upload functions (`upload`, `syncToRemote`) are unchanged.
+
 ## Installation
 
 ### Using npm(ES6 module):

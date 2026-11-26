@@ -20,6 +20,7 @@ import SFTPClient from 'ssh2-sftp-client'
 import sepTreeFolders from './sepTreeFolders.mjs'
 import ftpSyncToLocal from './ftpSyncToLocal.mjs'
 import ftpSyncToRemote from './ftpSyncToRemote.mjs'
+import downloadViaTemp from './downloadViaTemp.mjs'
 
 
 function CoreSFTP(opt = {}) {
@@ -54,9 +55,15 @@ function CoreSFTP(opt = {}) {
     //timeLimit
     let timeLimit = get(opt, 'timeLimit')
     if (!isnum(timeLimit)) {
-        timeLimit = 1 * 60 * 1000 //1hr
+        timeLimit = 1 * 60 * 1000 //1min, 預設60000毫秒; 下載(含SFTP, 本版起)自傳輸開始起計此時間, 大檔須自行給較大值
     }
     timeLimit = cint(timeLimit)
+    if (!(timeLimit > 0)) {
+        timeLimit = 1 * 60 * 1000 //0與負數視為未給(setTimeout會把它當作1毫秒而使操作立即逾時, SFTP下載自本版起受timeLimit約束), 改用預設
+    }
+
+    //fdDownloadTemp, 實例層級之下載暫存區, 非空字串才採用, 否則用預設, 於建構時轉絕對路徑
+    let fdDownloadTemp = downloadViaTemp.resolveFdTemp(get(opt, 'fdDownloadTemp'), downloadViaTemp.fdTempDefault)
 
 
     async function ftpConn() {
@@ -358,7 +365,7 @@ function CoreSFTP(opt = {}) {
     }
 
 
-    async function ftpDownload(fpRemote, fpLocal, cbProcess = null) {
+    async function ftpDownload(fpRemote, fpLocal, cbProcess = null, optCall = {}) {
 
         //pm
         let pm = genPm()
@@ -390,9 +397,30 @@ function CoreSFTP(opt = {}) {
             fsCreateFolder(fdLocal)
         }
 
-        //ftpStateTar
-        let file = await ftpStateTar(fpRemote)
+        //ftpStateTar, 加計時: 伺服器於查詢遠端檔案資訊時停滯, 亦依timeLimit逾時(否則永不結束)
+        let errStat = null
+        let file = await downloadViaTemp.withTimeLimit({
+            run: () => ftpStateTar(fpRemote),
+            timeLimit,
+            stage: 'stat',
+            optCall,
+        })
+            .catch((err) => {
+                errStat = err
+            })
         // console.log('file', file)
+
+        //check
+        if (errStat !== null) {
+            pm.reject(errStat)
+            return pm
+        }
+
+        //check, 查詢期間已quit
+        if (Ftp === null) {
+            pm.reject(`FTP has not been initialized. please use 'conn' to construct FTP`)
+            return pm
+        }
 
         //ftpIsFileCore
         let b = ftpIsFileCore(file)
@@ -421,58 +449,45 @@ function CoreSFTP(opt = {}) {
         fileSize = cint(fileSize)
         // console.log('fileSize', fileSize)
 
-        //check
-        if (fsIsFile(fpLocal)) {
-            fs.unlinkSync(fpLocal)
-        }
-        // console.log('fpLocal', fpLocal)
+        //Ftp, 固定本次所用之連線, 避免傳輸期間quit將Ftp設為null(已於上方確認不為null)
+        let FtpNow = Ftp
 
-        //timeLimit
-        let t = setTimeout(() => {
-            pm.reject(`ftpDownload timeout[${timeLimit}]`)
-        }, timeLimit)
+        //downloadViaTemp, 先寫入暫存區, 傳輸成功且大小相符才移至fpLocal, 舊fpLocal於此之前不動; 逾時(timeLimit)自傳輸開始起計
+        return downloadViaTemp({
+            fpLocal,
+            fileSize,
+            timeLimit,
+            fdTempInst: fdDownloadTemp,
+            optCall,
+            transfer: (fpTemp, ctl) => {
 
-        //fastGet
-        Ftp.fastGet(fpRemote, fpLocal, {
-            step: (total_transferred, chunk, total) => {
-                // console.log(total_transferred, chunk, total)
-                // 32768 32768 1384928
-                // 65536 32768 1384928
-                // ...
-                // 1376256 32768 1384928
-                // 1384928 8672 1384928
+                //fastGet, 寫入暫存檔; SFTP無法中止, 逾時後可能於背景續行, 結束時由downloadViaTemp刪除暫存檔
+                return FtpNow.fastGet(fpRemote, fpTemp, {
+                    step: (total_transferred, chunk, total) => {
+                        // console.log(total_transferred, chunk, total)
+                        // 32768 32768 1384928
+                        // 65536 32768 1384928
+                        // ...
+                        // 1376256 32768 1384928
+                        // 1384928 8672 1384928
 
-                //cbProcess
-                if (isfun(cbProcess)) {
-                    let r = total_transferred / total * 100
-                    // console.log(`receving... ${dig((r), 1)}%`)
-                    cbProcess({
-                        progress: r,
-                        name: getFileName(fpLocal),
-                        fpRemote,
-                        fpLocal,
-                    })
-                }
+                        //cbProcess, 逾時後不再通知
+                        if (isfun(cbProcess) && ctl.active()) {
+                            let r = total_transferred / total * 100
+                            // console.log(`receving... ${dig((r), 1)}%`)
+                            cbProcess({
+                                progress: r,
+                                name: getFileName(fpLocal),
+                                fpRemote,
+                                fpLocal,
+                            })
+                        }
+
+                    },
+                })
 
             },
         })
-            .then(() => {
-                pm.resolve('ok')
-            })
-            .catch((err) => {
-                pm.reject(err)
-            })
-            .finally(() => {
-
-                //clearTimeout
-                clearTimeout(t)
-
-            })
-
-        //clearTimeout
-        clearTimeout(t)
-
-        return pm
     }
 
 
@@ -585,8 +600,8 @@ function CoreSFTP(opt = {}) {
         isFolder: ftpIsFolder,
         download: ftpDownload,
         upload: ftpUpload,
-        syncToLocal: async (fdRemote, fdLocal, cbProcess) => {
-            return ftpSyncToLocal(fdRemote, fdLocal, cbProcess, { ftpLs, ftpDownload })
+        syncToLocal: async (fdRemote, fdLocal, cbProcess, opt = {}) => {
+            return ftpSyncToLocal(fdRemote, fdLocal, cbProcess, { ...opt, ftpLs, ftpDownload }) //比照CoreFTP轉交opt(原版未轉交, levelLimit等皆被忽略)
         },
         syncToRemote: async (fdLocal, fdRemote, cbProcess) => {
             return ftpSyncToRemote(fdLocal, fdRemote, cbProcess, { ftpLs, ftpUpload })

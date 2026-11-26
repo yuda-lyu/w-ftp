@@ -13,6 +13,9 @@ describe('api-ftp-flow', function() {
     //fdLocal, 本機下載與上傳來源資料夾
     let fdLocal = './_apiftpflow_local'
 
+    //fdDlTemp, 下載暫存區(指定之, 免於cwd留下預設資料夾)
+    let fdDlTemp = './_apiftpflow_dltemp'
+
     let srv = null
     let ftp = null
 
@@ -39,6 +42,7 @@ describe('api-ftp-flow', function() {
             username: 'u1',
             password: 'p1',
             timeLimit: 10000,
+            fdDownloadTemp: fdDlTemp,
         })
 
         //conn
@@ -51,6 +55,7 @@ describe('api-ftp-flow', function() {
         await srv.close()
         w.fsDeleteFolder(fdSrv)
         w.fsDeleteFolder(fdLocal)
+        w.fsDeleteFolder(fdDlTemp)
     })
 
     it('ls: 列舉根目錄之檔案與資料夾', async function() {

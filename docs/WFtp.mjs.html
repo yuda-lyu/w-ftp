@@ -29,7 +29,7 @@
 <nav >
     
     
-    <h2><a href="index.html">Home</a></h2><h3>Global</h3><ul><li><a href="global.html#WFtp">WFtp</a></li><li><a href="global.html#conn">conn</a></li><li><a href="global.html#cwd">cwd</a></li><li><a href="global.html#download">download</a></li><li><a href="global.html#isFile">isFile</a></li><li><a href="global.html#isFolder">isFolder</a></li><li><a href="global.html#ls">ls</a></li><li><a href="global.html#mkdir">mkdir</a></li><li><a href="global.html#pwd">pwd</a></li><li><a href="global.html#quit">quit</a></li><li><a href="global.html#stat">stat</a></li><li><a href="global.html#syncToLocal">syncToLocal</a></li><li><a href="global.html#syncToRemote">syncToRemote</a></li><li><a href="global.html#upload">upload</a></li></ul>
+    <h2><a href="index.html">Home</a></h2><h3>Global</h3><ul><li><a href="global.html#WFtp">WFtp</a></li><li><a href="global.html#conn">conn</a></li><li><a href="global.html#cwd">cwd</a></li><li><a href="global.html#download">download</a></li><li><a href="global.html#downloadViaTemp">downloadViaTemp</a></li><li><a href="global.html#isFile">isFile</a></li><li><a href="global.html#isFolder">isFolder</a></li><li><a href="global.html#ls">ls</a></li><li><a href="global.html#mkdir">mkdir</a></li><li><a href="global.html#pwd">pwd</a></li><li><a href="global.html#quit">quit</a></li><li><a href="global.html#resolveFdTemp">resolveFdTemp</a></li><li><a href="global.html#stat">stat</a></li><li><a href="global.html#syncToLocal">syncToLocal</a></li><li><a href="global.html#syncToRemote">syncToRemote</a></li><li><a href="global.html#upload">upload</a></li><li><a href="global.html#withTimeLimit">withTimeLimit</a></li></ul>
     
 </nav>
 
@@ -246,9 +246,19 @@ async function isFolder(fpRemote) {
 /**
  * 下載伺服器指定檔案至本機
  *
+ * 先寫入下載暫存區(opt.fdDownloadTemp)內本次專用之暫存檔(`&lt;檔名>.&lt;行程id>.&lt;隨機碼>.part`，以排他方式建立，同一暫存區由多個實例共用或遠端檔名相同皆不相撞)，
+ * 傳輸成功結束且本地大小等於遠端大小才移至fpLocal(取代舊檔)；與fpLocal同一磁碟時以改名一步取代，跨磁碟時先複製至fpLocal同資料夾之暫存名(`&lt;檔名>.&lt;行程id>.&lt;隨機碼>.part`)再於同資料夾內改名；檔名超過150位元組者，暫存名中之檔名基底以碼點截短(使暫存名不超過255位元組)；
+ * 遠端大小無法取得(FTP之SIZE指令失敗)時無從核對是否下載完整，直接reject(`can not get the size of file[fpRemote]`)而不傳輸；fpLocal為既有資料夾時於傳輸前即reject(`ftpDownload: fpLocal is a directory, fpLocal is not changed`)；改名遇占用(EPERM、EBUSY、EACCES，Windows下常為防毒掃描)時最多嘗試5次(每次失敗後等待200毫秒乘嘗試次數)，用盡仍失敗即刪除暫存檔並reject。
+ * 暫存區內逾24小時未更新、符合上述暫存檔名格式、行程id對應之行程已不存在者(本行程與他行程仍存在者皆不清)，視為崩潰殘留，由本行程於首次使用該暫存區時清除(之後同一行程最多每小時清一次)；不符格式之檔不動。
+ * 傳輸失敗(含連線中斷)、逾時、大小不符或無法移動時，刪除暫存檔並reject，fpLocal之舊檔不動(不存在者仍不存在)。
+ * 逾時自傳輸開始起計(WFtp之opt.timeLimit，預設60000毫秒，SFTP自本版起亦受其約束，大檔須自行給較大值)，到時即reject(訊息`ftpDownload timeout[timeLimit]`)並刪除暫存檔名；SFTP查詢遠端檔案資訊之階段亦另受同一timeLimit約束，伺服器於該階段停滯時同樣逾時；FTP會中止傳輸，SFTP無法中止而可能於背景續行，其結束時只刪除暫存檔、不移至fpLocal(quit斷線後背景傳輸可能不再結束，暫存檔名已於逾時時刪除)；暫存檔名每次唯一，故逾時後可直接重試，或quit再conn重試同一檔。
+ *
  * @param {String} opt.fpRemote 輸入伺服器上指定檔案字串
  * @param {String} opt.fpLocal 輸入本機指定檔案字串
  * @param {Function} [opt.cbProcess=null] 輸入回調進度函數
+ * @param {Object} [opt.opt={}] 輸入單次呼叫之設定物件，預設{}
+ * @param {String} [opt.opt.fdDownloadTemp] 輸入本次下載之暫存區資料夾字串，不含NUL字元之非空字串才採用，未給或非預期之輸入(非字串、空字串、含NUL等)視為未給而用WFtp之opt.fdDownloadTemp
+ * @param {Function} [opt.opt.onTrace=null] 輸入觀察回調函數，收到凍結之事件物件{ type, ... }，type為'sweep'({ removed })、'temp'({ act: 'create'或'remove', ok })、'timeout'({ timeLimit, stage: 'stat'或'transfer' })、'transfer'({ ok, late })、'verify'({ ok, size, sizeRemote })、'retry'({ n, code })、'move'({ mode: 'rename'或'copy' })；逾時後之'transfer'(late為true)與'temp'(act為'remove')於reject之後才發生；回調之拋錯與rejection皆忽略，預設null
  * @return {Promise} 回傳Promise，resolve回傳成功訊息，reject回傳錯誤訊息
  * @example
  * import WFtp from './src/WFtp.mjs'
@@ -281,7 +291,7 @@ async function isFolder(fpRemote) {
  *         console.log(err)
  *     })
  */
-async function download(fpRemote, fpLocal, cbProcess = null) {
+async function download(fpRemote, fpLocal, cbProcess = null, opt = {}) {
     return null
 }
 
@@ -332,9 +342,16 @@ async function upload(fpLocal, fpRemote, cbProcess) {
 /**
  * 同步伺服器上指定資料夾內檔案至本機
  *
+ * 各檔依序以download下載(先寫入暫存區，完成才移至本機資料夾)，某檔失敗即reject，其後之檔不再下載，已下載者保留，失敗之檔維持舊檔
+ *
  * @param {String} opt.fdRemote 輸入伺服器上指定資料夾字串
  * @param {String} opt.fdLocal 輸入本機指定資料夾字串
  * @param {Function} [opt.cbProcess=null] 輸入回調進度函數
+ * @param {Object} [opt.opt={}] 輸入設定物件，預設{}
+ * @param {Integer} [opt.opt.levelLimit=null] 輸入同步之資料夾層數正整數，非正整數視為不限層數，預設null
+ * @param {Boolean} [opt.opt.forceOverwriteWhenSync=false] 輸入是否不論大小一律重新下載布林值，預設false
+ * @param {String} [opt.opt.fdDownloadTemp] 輸入下載暫存區資料夾字串，轉交download，見download
+ * @param {Function} [opt.opt.onTrace=null] 輸入觀察回調函數，轉交各檔之download，見download
  * @return {Promise} 回傳Promise，resolve回傳成功訊息，reject回傳錯誤訊息
  * @example
  * import WFtp from './src/WFtp.mjs'
@@ -367,7 +384,7 @@ async function upload(fpLocal, fpRemote, cbProcess) {
  *         console.log(err)
  *     })
  */
-async function syncToLocal(fdRemote, fdLocal, cbProcess) {
+async function syncToLocal(fdRemote, fdLocal, cbProcess, opt = {}) {
     return null
 }
 
@@ -579,6 +596,8 @@ async function pwd(fpRemote) {
  * @param {Integer} [opt.port=21|22] 輸入port正整數，當transportation='FTP'預設21，當transportation='SFTP'預設22
  * @param {String} [opt.username=''] 輸入帳號字串，預設''
  * @param {String} [opt.password=''] 輸入密碼字串，預設''
+ * @param {Integer} [opt.timeLimit=60000] 輸入各操作之逾時毫秒數字，下載為每檔自傳輸開始起計(SFTP自本版起亦受約束，SFTP另對查詢遠端檔案資訊之階段計時)，大檔須自行給較大值；0與負數視為未給，改用預設；超過2147483647(約24.8天)者以其為上限，預設60000
+ * @param {String} [opt.fdDownloadTemp='./_wftpDownloadTemp'] 輸入下載暫存區資料夾字串，下載中之檔先寫入此處，完成才移至目標，於建構時轉為絕對路徑(相對路徑以當時之cwd為準)，不存在時自動建立；非預期之輸入(非字串、空字串、含NUL等)視為未給而用預設；勿設於syncToLocal之本機資料夾內，預設'./_wftpDownloadTemp'
  * @returns {Object} 回傳FTP操作物件，包含conn、ls、stat、isFile、download、syncToLocal、syncToRemote、upload、quit。
  * @example
  * import WFtp from './src/WFtp.mjs'
@@ -777,7 +796,7 @@ export default WFtp
 <br class="clear">
 
 <footer>
-    Documentation generated by <a href="https://github.com/jsdoc3/jsdoc">JSDoc 4.0.5</a> on Thu Nov 26 2026 01:21:32 GMT+0800 (台北標準時間) using the <a href="https://github.com/clenemt/docdash">docdash</a> theme.
+    Documentation generated by <a href="https://github.com/jsdoc3/jsdoc">JSDoc 4.0.5</a> on Thu Nov 26 2026 14:07:57 GMT+0800 (台北標準時間) using the <a href="https://github.com/clenemt/docdash">docdash</a> theme.
 </footer>
 
 <script>prettyPrint();</script>
