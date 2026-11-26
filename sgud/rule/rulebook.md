@@ -2,6 +2,14 @@
 
 本檔為套件設計與開發階段之規則帳本(藍圖),為要求程式碼須長成什麼樣,或由規格產出之測試(項目/說明/流程)有哪些,包含軸、單一擁有者、已知限制、破壞性變更紀錄,以及對應是哪些測試檔案或指令等,由agent自行編列、擴充與維護.當前已做到哪些記於`sgud/state/state.md`.過長時依類型拆為`rulebook_<類型>.md`,本檔只留索引.
 
+## 本機端檔案列舉之層數(wsemi 1.9.80 起之 `opt.levelLimit`)
+
+需求出處:使用端(Gitea 項 492 與 wsemi 破壞性變更第 83 項).單一擁有者:`src/ftpTreeFilesInLocalAndRemote.mjs`(本機端列舉 wsemi `fsTreeFolder`、遠端端列舉 `src/ftpTreeFolder.mjs`);`ftpSyncToLocal`、`ftpSyncToRemote` 只轉交 `opt.levelLimit`.
+
+| 規則 | 內容 | 站點全集與盤點 | 測試 |
+|---|---|---|---|
+| R-LV-01 本機端列舉之層數 | 本庫 `opt.levelLimit` 經 `ispint` 判定,非正整數視為不限層數(內部 `null`).呼叫 wsemi `fsTreeFolder` 時第 2 參數為 opt 物件(1.9.80 起,給數字拋 `invalid opt: must be an object`):不限層數(`null`)者**不給** `levelLimit`(未給即窮舉),有限層數者給 `{ levelLimit }`;不得給數字(含 `4294967295`),不得把不限層數轉成 `{ levelLimit: 1 }`.超出 wsemi 有效範圍之值(`Infinity`、`4294967296`、`1e10`、`'0x10'`)wsemi 視為未給而窮舉,本機端因此不限層數(與 JSDoc「非正整數視為不限層數」及遠端對 `Infinity` 之行為一致) | `git grep -nE "\b(fsTreeFolder\|fsTreeFolderWithHash\|fsGetFilesInFolder\|fsGetFilesWithHashInFolder\|fsGetFoldersInFolder)(Core)?\s*\(" -- . ':!dist' ':!docs'`(2026-11-26 全集:僅 `src/ftpTreeFilesInLocalAndRemote.mjs` 之 `fsTreeFolder(fdLocal, optLocal)` 1 處,`optLocal` 為 `{}` 或 `{ levelLimit }`;`g-*.mjs`、README、JSDoc、`test/` 皆 0 處) | `test/unit-ftp-tree-files-local.test.mjs`(各 `levelLimit` 輸入之本機列舉層數、邊界值、`ftpSyncToRemote`/`ftpSyncToLocal` 之本機端接線)、`test/api-ftp-sync-multilevel.test.mjs`(真實 `WFtp` 經假 FTP 伺服器之 3 層同步).變異(2026-11-26,鏡像根注入,跑上列兩檔,對照組 10 passing):本機端一律 `{ levelLimit: 1 }` → 9 案紅;一律 `{}` → 1 案紅(有限層數案);不限層數時退回 `{ levelLimit: 1 }` → 7 案紅;退回舊寫法(數字 `4294967295`)→ 10 案全紅;有限層數多給 1 層 → 1 案紅;邊界值改取 1 層(還原舊版行為)→ 1 案紅(邊界值案) |
+
 ## 下載(`download`、`syncToLocal`;FTP 與 SFTP)
 
 需求出處:使用端(Gitea #214).單一擁有者:`src/downloadViaTemp.mjs`(暫存、計時、核對、移動、殘留清理、`onTrace` 事件);呼叫點:`src/CoreSFTP.mjs` 與 `src/CoreFTP.mjs` 之 `ftpDownload`.

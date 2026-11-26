@@ -8,8 +8,8 @@ import ftpSyncToLocal from '../src/ftpSyncToLocal.mjs'
 
 
 //ftpTreeFilesInLocalAndRemote之本機半邊: 本機資料夾列舉之層數限制
-//規格(使用端需求, wsemi fsTreeFolder之levelLimit改制): 本庫opt.levelLimit非正整數表不限層數, 傳給wsemi之fs列舉函數時須為大有限值4294967295,
-//因新版wsemi之fsTreeFolder給null時改取預設1(只列第1層); 遠端列舉(ftpLs)不在本測試範圍, 以空列舉之替身取代
+//規格(使用端需求, wsemi fsTreeFolder之levelLimit改制): 本庫opt.levelLimit非正整數表不限層數, 傳給wsemi之fs列舉函數時不給opt.levelLimit(wsemi 1.9.80起未給即列舉全部層級),
+//有限層數才以{ levelLimit }傳入; 遠端列舉(ftpLs)不在本測試範圍, 以空列舉之替身取代
 describe('unit-ftp-tree-files-local', function() {
 
     //fdBase, 測試臨時資料夾(依測試規範放test/_tmp/<案名>/)
@@ -71,6 +71,14 @@ describe('unit-ftp-tree-files-local', function() {
         for (let c of cases) {
             let r = await ftpTreeFilesInLocalAndRemote('.', fdLocal, { ftpLs: ftpLsEmpty, levelLimit: c.levelLimit })
             assert.strict.deepEqual(rpaths(r), c.rps, `levelLimit=${c.levelLimit}`)
+        }
+    })
+
+    //規格: JSDoc「opt.levelLimit輸入同步之資料夾層數正整數，非正整數視為不限層數」; Infinity非整數故不限層數, 1e10與4294967296雖為正整數但遠大於任何實際層數, 等同不限層數
+    it('opt.levelLimit為Infinity,4294967296,1e10,"0x10"(超出wsemi有效範圍之值): 本機端不限層數, 列舉全部層級', async function() {
+        for (let levelLimit of [Infinity, 4294967296, 1e10, '0x10']) {
+            let r = await ftpTreeFilesInLocalAndRemote('.', fdLocal, { ftpLs: ftpLsEmpty, levelLimit })
+            assert.strict.deepEqual(rpaths(r), all, `levelLimit=${String(levelLimit)}`)
         }
     })
 

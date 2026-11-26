@@ -67,11 +67,11 @@ async function ftpTreeFilesInLocalAndRemote(fdRemote, fdLocal, opt = {}) {
         return r
     }
 
-    //levelLimitLocal, wsemi之fsTreeFolder自1.9.63起levelLimit給null改取預設1(只列第1層), 無窮遍歷須給大有限值4294967295
-    let levelLimitLocal = levelLimit === null ? 4294967295 : levelLimit
+    //optLocal, wsemi之fsTreeFolder自1.9.80起第2參數為opt, 未給opt.levelLimit即列舉全部層級, 故不限層數(null)時不給opt.levelLimit, 有限層數才給
+    let optLocal = levelLimit === null ? {} : { levelLimit }
 
     //fsLocal
-    let fsLocal = fsTreeFolder(fdLocal, levelLimitLocal)
+    let fsLocal = fsTreeFolder(fdLocal, optLocal)
     fsLocal = filter(fsLocal, (v) => {
         return !v.isFolder
     })

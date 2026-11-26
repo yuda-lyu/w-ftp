@@ -7,7 +7,7 @@ import fakeFtpServer from './lib/fakeFtpServer.mjs'
 
 //多層資料夾之syncToRemote與syncToLocal(真實WFtp經假FTP伺服器, 不替身ftpLs/ftpUpload/ftpDownload)
 //規格(使用端需求, wsemi fsTreeFolder之levelLimit改制): opt.levelLimit未給時表不限層數, 本機端列舉須含全部層級,
-//新版wsemi之fsTreeFolder給null時只列第1層, 本機端短少會使上傳漏檔, 或使已同步之深層檔案被重複下載
+//本機端列舉短少(例如誤以只列第1層之形式呼叫wsemi之fsTreeFolder)會使上傳漏檔, 或使已同步之深層檔案被重複下載
 describe('api-ftp-sync-multilevel', function() {
 
     //fdBase, 測試臨時資料夾(依測試規範放test/_tmp/<案名>/)

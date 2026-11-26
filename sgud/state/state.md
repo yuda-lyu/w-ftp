@@ -6,10 +6,10 @@
 
 - **現況**:`ftpSyncToLocal`、`ftpSyncToRemote` 之 `opt.levelLimit` 非正整數(`ispint` 判定為否)時視為不限層數(內部以 `null` 表示),經 `ftpTreeFilesInLocalAndRemote` 分兩端列舉:
   - 遠端:`ftpTreeFolder` 自行遞迴,`null` 為不限(`src/ftpTreeFolder.mjs`),未經 wsemi.
-  - 本機:呼叫 wsemi `fsTreeFolder`.wsemi 1.9.63 起該函數之 `levelLimit` 給 `null` 改取預設 1(只列第 1 層),不限層數須給大有限值 `4294967295`;故於呼叫處把 `null` 轉為 `4294967295`(`src/ftpTreeFilesInLocalAndRemote.mjs` 之 `levelLimitLocal`).此寫法於 wsemi 1.9.62 與 1.9.63 皆為不限層數.
-- **測試**:`test/unit-ftp-tree-files-local.test.mjs`(本機列舉之各 `levelLimit` 輸入、`ftpSyncToRemote`／`ftpSyncToLocal` 之本機端接線,遠端以替身)、`test/api-ftp-sync-multilevel.test.mjs`(真實 `WFtp` 經假 FTP 伺服器之 3 層同步與再同步無差異).
-- **已知缺口(未修,待輸入檢測盤點)**:`ispint` 對 `Infinity`、大於 `4294967295` 之數、字串 `'0x10'` 皆回 `true`,此類值經 `levelLimit` 傳給 wsemi `fsTreeFolder` 時被視為非預期而取預設 1(本機端只列第 1 層),而遠端列舉對 `Infinity` 為不限,兩端不一致.詳見 `sgud/feedback/feedback.md`.
-- **最近一次驗證**:wsemi 1.9.63、全套 24 案通過(2026-11-17).
+  - 本機:呼叫 wsemi `fsTreeFolder`.wsemi 1.9.80 起該函數之第 2 參數為 opt 物件,未給 `opt.levelLimit` 即窮舉全部層級,給數字拋錯;故不限層數(`null`)時傳 `{}`、有限層數時傳 `{ levelLimit }`(`src/ftpTreeFilesInLocalAndRemote.mjs` 之 `optLocal`,規則 R-LV-01).
+- **測試**:`test/unit-ftp-tree-files-local.test.mjs`(本機列舉之各 `levelLimit` 輸入與邊界值、`ftpSyncToRemote`／`ftpSyncToLocal` 之本機端接線,遠端以替身)、`test/api-ftp-sync-multilevel.test.mjs`(真實 `WFtp` 經假 FTP 伺服器之 3 層同步與再同步無差異).
+- **超出 wsemi 有效範圍之 `levelLimit`**(`Infinity`、大於 `4294967295` 之數、字串 `'0x10'`;`ispint` 皆回 `true`):wsemi 1.9.80 起視為未給而窮舉,本機端不限層數,遠端對 `Infinity` 與極大值亦實質不限,兩端一致(舊版取 1 層而不一致之缺口已因此消失,見 `sgud/feedback/feedback.md` 第 1 列之承接列).`'0x10'` 遠端以 `level <= '0x10'` 比較而限 16 層,與本機不限層數仍有差異,屬極端輸入,未另處理.
+- **最近一次驗證**:2026-11-26(本機 Windows、wsemi 1.9.80):全套 94 案,93 通過、1 略過.
 
 ## 下載(`download`、`syncToLocal`;FTP 與 SFTP)
 
