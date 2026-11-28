@@ -252,9 +252,22 @@ async function download(fpRemote, fpLocal, cbProcess = null, opt = {}) {
 /**
  * 上傳本機指定檔案至伺服器
  *
+ * 先寫入遠端目標同一資料夾之本次專用暫存名(`<檔名>.<行程id>.<8碼隨機碼>.part`，檔名超過150位元組者基底以碼點截短)，傳輸成功結束且遠端暫存大小等於本機大小(本機大小於傳輸期間亦未改變)才改名為fpRemote；
+ * 傳輸失敗(含連線中斷)、逾時、大小不符、本機檔改變或改名失敗時，刪除遠端暫存並reject，fpRemote之舊檔不動。FTP以串流讀本機檔(不整檔讀入記憶體)，不改變工作目錄；多層資料夾自動建立。
+ *
+ * 改名：SFTP用posix-rename@openssh.com擴充覆蓋(原子)，伺服器未支援或拒絕時改用一般rename；FTP用RNFR/RNTO。伺服器之rename不覆蓋既有檔時(部分FTP伺服器、無該擴充之SFTP伺服器)，改依序「舊檔改為暫存名(`<檔名>.<行程id>.<隨機碼>.old`)、暫存改為fpRemote、刪除舊檔暫名」，此時非原子(兩次改名之間fpRemote不存在)，中途失敗會嘗試把舊檔改回。
+ * 伺服器須允許改名與刪除；不允許改名者reject(`ftpUpload: can not rename the temporary file to fpRemote (<code>), fpRemote is not changed`)，新內容已就位但舊檔暫名刪不掉者reject(`ftpUpload: fpRemote is updated, but can not remove the old file kept under a temporary name in the same folder`)。
+ *
+ * 失敗訊息(固定詞彙，不含路徑與伺服器訊息)：傳輸本身之錯誤且暫存已清除時沿用原錯誤；暫存刪不掉者訊息後綴`, can not remove the remote temporary file`(傳輸錯誤改為`ftpUpload: transfer failed (<code>), ...`)；大小不符`ftpUpload: uploaded size[N] does not match local size[M], fpRemote is not changed`；本機檔改變`ftpUpload: fpLocal was changed during upload, fpRemote is not changed`；查不到暫存大小`ftpUpload: can not get the size of the uploaded temporary file (<code>), fpRemote is not changed`(FTP伺服器不支援SIZE者上傳一律如此)；交換退路中舊檔仍(或可能仍)以暫名保留者訊息含`the old file of fpRemote is kept under a temporary name in the same folder`(或`may be kept`)。
+ *
+ * 逾時：建立資料夾、傳輸、核對大小、改名各階段分別以WFtp之opt.timeLimit計時(傳輸自開始起計，大檔須自行給較大值)，到時中止(銷毀本次所用之連線，FTP含數據socket，不再送出資料)、以同一設定重新連線(FTP重放曾成功之cwd)、刪除暫存後reject(`ftpUploadCore timeout[timeLimit]`；改名階段為`ftpUploadCore timeout[timeLimit] while renaming, fpRemote may or may not be updated`)；清理、還原與重新連線各步以min(timeLimit, 10000)毫秒為限。
+ * 中止會一併中斷同一實例上同時進行之其他操作(如併發之下載)；使用者已quit者不重新連線。行程崩潰或連線無法恢復而殘留之遠端暫存名不會自動清除。目標既有檔之權限與擁有者不保留(新檔依伺服器預設)；目標為符號連結者改由新檔取代該連結。
+ *
  * @param {String} opt.fpLocal 輸入本機指定檔案字串
  * @param {String} opt.fpRemote 輸入伺服器上指定檔案字串
- * @param {Function} [opt.cbProcess=null] 輸入回調進度函數
+ * @param {Function} [opt.cbProcess=null] 輸入回調進度函數，收到{ progress, name, fpRemote, fpLocal }，progress為已送出位元組之百分比；逾時後不再通知，回調拋錯忽略
+ * @param {Object} [opt.opt={}] 輸入單次呼叫之設定物件，預設{}
+ * @param {Function} [opt.opt.onTrace=null] 輸入觀察回調函數，收到凍結之事件物件{ type, ... }，type為'timeout'({ timeLimit, stage: 'prepare'、'transfer'、'verify'、'rename'、'clean'或'reconnect' })、'transfer'({ ok, late })、'verify'({ ok, size, sizeLocal })、'temp'({ act: 'remove', ok, kind: 'part'或'old' })、'move'({ mode: 'posix'、'rename'或'swap' })、'reconnect'({ ok })；逾時後之'transfer'(late為true)可能於reject之後才發生；回調之拋錯與rejection皆忽略，預設null
  * @return {Promise} 回傳Promise，resolve回傳成功訊息，reject回傳錯誤訊息
  * @example
  * import WFtp from './src/WFtp.mjs'
@@ -287,7 +300,7 @@ async function download(fpRemote, fpLocal, cbProcess = null, opt = {}) {
  *         console.log(err)
  *     })
  */
-async function upload(fpLocal, fpRemote, cbProcess) {
+async function upload(fpLocal, fpRemote, cbProcess = null, opt = {}) {
     return null
 }
 
@@ -345,10 +358,16 @@ async function syncToLocal(fdRemote, fdLocal, cbProcess, opt = {}) {
 /**
  * 同步本機指定資料夾內檔案至伺服器
  *
+ * 各檔依序以upload上傳(先寫入遠端暫存名，完成且大小相符才改名)，某檔失敗即reject，其後之檔不再上傳，已上傳者保留，失敗之檔維持舊檔
+ *
  * @param {String} opt.fdLocal 輸入本機指定資料夾字串
  * @param {String} opt.fdRemote 輸入伺服器上指定資料夾字串
  * @param {Function} [opt.cbProcess=null] 輸入回調進度函數
- * @return {Promise} 回傳Promise，resolve回傳成功訊息，reject回傳錯誤訊息
+ * @param {Object} [opt.opt={}] 輸入設定物件，預設{}
+ * @param {Integer} [opt.opt.levelLimit=null] 輸入同步之資料夾層數正整數，非正整數視為不限層數，預設null
+ * @param {Boolean} [opt.opt.forceOverwriteWhenSync=false] 輸入是否不論大小一律重新上傳布林值，預設false
+ * @param {Function} [opt.opt.onTrace=null] 輸入觀察回調函數，轉交各檔之upload，見upload
+ * @return {Promise} 回傳Promise，resolve回傳成功訊息{ num, files }，reject回傳錯誤訊息
  * @example
  * import WFtp from './src/WFtp.mjs'
  *
@@ -380,7 +399,7 @@ async function syncToLocal(fdRemote, fdLocal, cbProcess, opt = {}) {
  *         console.log(err)
  *     })
  */
-async function syncToRemote(fdLocal, fdRemote, cbProcess) {
+async function syncToRemote(fdLocal, fdRemote, cbProcess, opt = {}) {
     return null
 }
 
@@ -549,7 +568,7 @@ async function pwd(fpRemote) {
  * @param {Integer} [opt.port=21|22] 輸入port正整數，當transportation='FTP'預設21，當transportation='SFTP'預設22
  * @param {String} [opt.username=''] 輸入帳號字串，預設''
  * @param {String} [opt.password=''] 輸入密碼字串，預設''
- * @param {Integer} [opt.timeLimit=60000] 輸入各操作之逾時毫秒數字，下載為每檔自傳輸開始起計(SFTP自本版起亦受約束，SFTP另對查詢遠端檔案資訊之階段計時)，大檔須自行給較大值；0與負數視為未給，改用預設；超過2147483647(約24.8天)者以其為上限，預設60000
+ * @param {Integer} [opt.timeLimit=60000] 輸入各操作之逾時毫秒數字，下載為每檔自傳輸開始起計(SFTP自本版起亦受約束，SFTP另對查詢遠端檔案資訊之階段計時)，上傳為建立資料夾、傳輸、核對大小、改名各階段分別計時(見upload)，大檔須自行給較大值；0與負數視為未給，改用預設；超過2147483647(約24.8天)者以其為上限，預設60000
  * @param {String} [opt.fdDownloadTemp='./_wftpDownloadTemp'] 輸入下載暫存區資料夾字串，下載中之檔先寫入此處，完成才移至目標，於建構時轉為絕對路徑(相對路徑以當時之cwd為準)，不存在時自動建立；非預期之輸入(非字串、空字串、含NUL等)視為未給而用預設；勿設於syncToLocal之本機資料夾內，預設'./_wftpDownloadTemp'
  * @returns {Object} 回傳FTP操作物件，包含conn、ls、stat、isFile、download、syncToLocal、syncToRemote、upload、quit。
  * @example

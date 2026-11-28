@@ -22,6 +22,19 @@
 - **不必另設而被其他判斷涵蓋之檢查**(例:清殘檔時之「非本行程所有」被「行程已不存在」涵蓋,本行程必然存在)之變異必然存活且無法補案,應直接刪除該檢查而不是補測試.
 - **Windows 上改名取代既有檔可能遇防毒占用**(`EPERM`/`EBUSY`/`EACCES`):移動採有界重試(共 5 次嘗試,間隔 200×次數毫秒),目標為資料夾時 `rename` 亦回 `EPERM`,須先判斷以免白等重試.
 
+## 上傳暫存、核對、改名與逾時中止(2026-11-28;jsftp 2.1.3、ssh2 1.17.0、ssh2-sftp-client 12.1.1)
+
+- **jsftp `put(stream)` 掛住**:`put` 對串流先掛 `'readable'` 監聽,串流進入暫停模式而 `pipe` 不流動(實測 5 秒 0 位元組);改用 `getPutSocket(stream, path, cb)`.數據 socket 由 jsftp 於收到 150 時以 `stream.pipe(socket)` 交出,覆寫該串流之 `pipe` 即可取得 socket 供逾時銷毀.
+- **jsftp 之上傳回呼早於伺服器最終回應**:`getPutSocket` 於數據 socket 關閉即回呼,`226`/`4xx` 尚未到;若此時送下一指令,失敗回應會錯派給下一指令.須監聽 `'data'` 事件等最終回應;併發指令之回應以 `commandQueue[0].action` 分辨(150 標記使 STOR 移出佇列).
+- **jsftp 控制連線關閉時不回呼進行中之指令**,`'error'` 事件無監聽者即使行程中止;銷毀後的 jsftp 物件再下指令會自行重建 socket 但舊佇列卡住,故中止後一律換新物件,新物件掛 `'error'` 空監聽,且非同步延續須固定「送出指令之連線」——遲到的舊連線錯誤曾銷毀了重新連線之新連線(測試抓到).
+- **ssh2 `fastPut` 兩個坑**:本機檔傳輸中被截短時零長度寫入走 `nextTick` 回呼而重讀同一段,無限迴圈;連線關閉時 `onerror` 仍對已斷通道送 `close` 而永不回呼.上傳改自寫 `open`/`write`/`close`(64 並行、32 KiB),真 OpenSSH `sftp-server` 上吞吐與 `fastPut` 相當(100 MiB 約 8 秒,改前 7.5～10.6 秒).ssh2 `Client` 之 `'close'` 事件早於各通道收尾,「寫入於收尾之後」之案須等 `'close'` 後再 `setImmediate`.
+- **ssh2-sftp-client 之路徑改寫**:`mkdir` 內 `normalizeRemotePath` 把 `.` 起首者一律當 `./`;`realpath('.')` 為 `/` 時組出 `//a/b`,Windows 之 `path.parse` 視為網路路徑、遞迴不收斂(假伺服器即重現).先以 `path.posix.join(realpath, 相對路徑)` 轉絕對路徑.
+- **ssh2-sftp-client 之 `stat` 把 SFTP 一般失敗(code 4)亦報為不存在**:判斷「刪不掉是否因不存在」改用原始 `sftp.stat` 只認 code 2.
+- **ssh2 之 `destroy()` 於 socket 不可寫(已 `end()`)時不作用**,須另銷毀 `client._sock`;主動銷毀時設 `endCalled` 免全域監聽印訊息,並清 `sftp` 使其後之指令立即失敗(否則送往死通道而永不回應).
+- **本機有真 SFTP 實作可測**:Git for Windows 內附 `usr/lib/ssh/sftp-server.exe`,以 ssh2 伺服端之 `subsystem` 接其 stdin/stdout 即得真 OpenSSH 行為;`-P posix-rename`、`-P rename,posix-rename`、`-P remove`、`-R` 可模擬無擴充、不可改名、不可刪、唯讀之伺服器.
+- **假伺服器之 STOR 須比照真實伺服器逐段寫檔**(收到指令即建立檔案);事後整檔寫入會在客戶端已刪除暫存後把它重建,使「無殘檔」斷言失準.
+- **清理與還原邏輯之盲點由唯讀獨立複審抓到**(重連之新連線無 `'error'` 監聽、交換退路斷線不重連、quit 與重連交錯拋 TypeError):逾時/斷線/重連之交錯,自寫測試易只覆蓋「逾時」一路,須另列「斷線」與「quit」兩軸.
+
 ## opt 讀取收斂至 wsemi `getOptReader`(2026-11-27,wsemi 1.9.82)
 
 - **只用 `.read` 之站點,`tag` 與 `opt.debug`、`opt.funLog` 皆不可由行為觀察**:`getOptReader` 之警告只在 `rd(key, def, check, …)` 檢測未過時才出,`.read(key)` 不檢測不警告;本庫(`downloadViaTemp`)只讀 `onTrace`、`fdDownloadTemp` 之原值,檢測交下游(`getTrace`、`resolveFdTemp`).故「接線」之行為證據取 `getOptReader` 於呼叫時必讀 `opt.debug` 一次(以 Proxy 記錄讀取之鍵,`debug` 非 true 時不讀 `funLog`),`tag` 只能以原始碼掃描釘住.

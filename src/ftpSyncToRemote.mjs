@@ -34,6 +34,11 @@ async function ftpSyncToRemote(fdLocal, fdRemote, cbProcess, opt = {}) {
         levelLimit = null
     }
 
+    //optUpload, 轉交ftpUpload之單次呼叫設定(觀察回調), 由ftpUpload檢測
+    let optUpload = {
+        onTrace: get(opt, 'onTrace'),
+    }
+
     //ftpTreeFilesInLocalAndRemote
     let r = await ftpTreeFilesInLocalAndRemote(fdRemote, fdLocal, { ftpLs, levelLimit })
     let fsRemote = r.fsRemote
@@ -73,7 +78,7 @@ async function ftpSyncToRemote(fdLocal, fdRemote, cbProcess, opt = {}) {
         //ftpUpload
         if (!iseobj(fileRemote)) {
             //遠端檔案不存在
-            await ftpUpload(fpLocal, fpRemote, cb)
+            await ftpUpload(fpLocal, fpRemote, cb, optUpload)
             n++
             ss.push({
                 name: fileLocal.rpath,
@@ -82,7 +87,7 @@ async function ftpSyncToRemote(fdLocal, fdRemote, cbProcess, opt = {}) {
         }
         else if (forceOverwriteWhenSync || (fileLocal.size !== fileRemote.size)) {
             //因無法對伺服器端檔案計算hash, 且儲存至本機的檔案變更時間為當時時間無法用以判斷, 暫時用本地檔案大小與遠端檔案大小檢測是否有變更
-            await ftpUpload(fpLocal, fpRemote, cb)
+            await ftpUpload(fpLocal, fpRemote, cb, optUpload)
             n++
             ss.push({
                 name: fileLocal.rpath,

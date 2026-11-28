@@ -1,6 +1,6 @@
 {
   "name": "w-ftp",
-  "version": "1.0.79",
+  "version": "1.0.80",
   "main": "dist/w-ftp.umd.js",
   "dependencies": {
     "dayjs": "^1.11.21",

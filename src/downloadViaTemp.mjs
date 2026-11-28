@@ -468,6 +468,10 @@ async function downloadViaTemp(o) {
 downloadViaTemp.fdTempDefault = fdTempDefault
 downloadViaTemp.resolveFdTemp = resolveFdTemp
 downloadViaTemp.withTimeLimit = withTimeLimit
+//以下供上傳流程(uploadViaTemp)共用: 單次opt之onTrace讀取、暫存名基底截短、計時器上限
+downloadViaTemp.traceOf = traceOf
+downloadViaTemp.tempStem = tempStem
+downloadViaTemp.msTimerMax = msTimerMax
 
 
 export default downloadViaTemp

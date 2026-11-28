@@ -15,8 +15,15 @@
 
 - **現況**:規則 R-DL-01～R-DL-08 皆已實作(見 `sgud/rule/rulebook.md`;需求出處:使用端 Gitea #214):先寫暫存區、傳輸成功且大小相符才移至目標、失敗保留舊檔;SFTP 之 `timeLimit` 生效(含 stat 階段),FTP 逾時銷毀數據 socket;SFTP 之 `syncToLocal` 轉交 opt;`opt.onTrace` 事件;暫存區崩潰殘留清理;移動遇占用有界重試.預設 `timeLimit` 仍為 60000 毫秒、預設暫存區 `./_wftpDownloadTemp`.
 - **測試**:`test/unit-download-via-temp.test.mjs`(共用流程之單元測試,傳輸以替身、逾時與重試間隔以假時鐘)、`test/api-sftp-download-temp.test.mjs`、`test/api-ftp-download-temp.test.mjs`(真實 `WFtp` 經假伺服器之接線案);夾具 `test/lib/dlTestKit.mjs`、`fakeSftpServer`(`hooks.READ`、`OPEN`、`STAT`、`statSize`)、`fakeFtpServer`(`hooks.RETR`).
-- **已知缺口**:上傳路徑(`ftpUpload`、`syncToRemote`)未改,仍直接寫入遠端目標、SFTP 上傳之計時器於啟動後立即清除而不逾時、SFTP 之 `syncToRemote` 未轉交 opt(另案);跨磁碟之實機驗證須兩磁碟(本機單碟時該案略過);`syncToLocal` 遇第一個失敗即停(語意不改).
+- **已知缺口**:跨磁碟之實機驗證須兩磁碟(本機單碟時該案略過);`syncToLocal` 遇第一個失敗即停(語意不改);`ls` 之逾時於 SFTP 無效(`ftpLs` 等 `Ftp.list` 結束才回傳,`timeLimit` 到時不會使呼叫端結束),`syncToLocal`、`syncToRemote` 之列舉階段受此影響(未改).
 - **最近一次驗證**:2026-11-26(本機 Windows、Node 24.22、wsemi 1.9.78):全套 93 案(24 既有＋69 新)92 通過、1 略過(實機跨磁碟案,本機單碟);發布包解開之目錄(wsemi 1.9.79)同為 92 通過、1 略過;新測試三檔連跑 20 次皆通過.
+
+## 上傳(`upload`、`syncToRemote`;FTP 與 SFTP)
+
+- **現況**:規則 R-UL-01～R-UL-08 皆已實作(見 `sgud/rule/rulebook.md`;需求出處:使用端 Gitea #214 §4 第 6 項):遠端同資料夾暫存名、大小核對後改名(SFTP posix-rename,不支援或被拒時退回 rename 與非原子交換)、失敗刪暫存且舊目標不動、各階段 `timeLimit` 到時銷毀連線並重連清理、FTP 串流讀本機檔且不再改變工作目錄、SFTP 改自寫並行寫入(不用 `fastPut`)、SFTP `syncToRemote` 轉交 opt、`upload` 第 4 參數 `onTrace`.
+- **測試**:`test/unit-upload-via-temp.test.mjs`(共用流程,傳輸端替身、逾時以假時鐘)、`test/api-sftp-upload-temp.test.mjs`、`test/api-ftp-upload-temp.test.mjs`(真實 `WFtp` 經假伺服器)、`test/api-upload-stall-exit.test.mjs`(逾時後子行程自行退出);夾具 `test/lib/ulTestKit.mjs`、`clientUploadFlow.mjs`、`fakeSftpServer`(寫入、改名、posix-rename 擴充、`hooks.WRITE/RENAME/REMOVE/AUTH`)、`fakeFtpServer`(逐段寫入之 STOR、RNFR/RNTO/DELE、`hooks.STOR/CMD`、`renameOverwrite`).
+- **已知缺口**:崩潰或無法重連之遠端暫存名不自動清理;目標權限與符號連結不保留;FTP 之 `SIZE` 不支援者上傳一律失敗;jsftp 隱式重連(伺服器關閉閒置控制連線後)不重放 `cwd`(改版前即如此,所有操作皆受影響);`ftp.conn` 之連線錯誤無 `'error'` 監聽者時行程中止(改版前即如此,本套件只於上傳重新連線時掛監聽);公開 `mkdir` 與下載路徑仍沿用 `sepTreeFolders`,SFTP 根目錄為 `/` 之伺服器於 Windows 端遞迴建立相對路徑多層資料夾會無限遞迴(上傳路徑已繞開);真實 FTP 伺服器未實測(本機只有假伺服器;SFTP 另以 Git 內附之 OpenSSH `sftp-server` 實測 8 情境).
+- **最近一次驗證**:2026-11-28(本機 Windows、Node 24.22、wsemi 1.9.83):全套 203 案,202 通過、1 略過(實機跨磁碟案,本機單碟);上傳四檔(103 案)連跑 10 次皆通過;變異 47 項全殺;建置冒煙(輸出至暫存)之 UMD 兩協定上傳成功;尚未發布.
 
 ## 單次呼叫 opt 之讀取(`getOptReader`)
 
