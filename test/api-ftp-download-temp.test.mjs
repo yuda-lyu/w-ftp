@@ -368,7 +368,7 @@ describe('api-ftp-download-temp', function() {
         assert.strict.deepEqual(listDir(fdTemp), [])
     })
 
-    it('逾時後才取得數據socket(伺服器延後回150): 直接銷毀不寫入, 背景結束只清不移, 目標之舊檔不動', async function() {
+    it('逾時發生於回150之前(伺服器延後回150): 連線銷毀使傳輸以失敗結束, 其後之150不再寫入, 只清不移, 目標之舊檔不動', async function() {
         let fd = prepOut('f12')
         let fdTemp = `${fdBase}/temp-f12`
         let g = gate()
@@ -390,7 +390,7 @@ describe('api-ftp-download-temp', function() {
         assert.strict.deepEqual(r.err, `ftpDownload timeout[${TL}]`)
         g.open()
         let [evTransfer] = await rec.wait((e) => e.type === 'transfer' && e.late === true)
-        assert.strict.deepEqual(evTransfer.ok, false) //已逾時才取得之socket不寫入, 傳輸以失敗結束(原寫入則為成功)
+        assert.strict.deepEqual(evTransfer.ok, false) //規格(R-CN-02): 逾時銷毀本次所用之連線, 傳輸以失敗結束
         await rec.wait((e) => e.type === 'temp' && e.act === 'remove')
         assert.strict.deepEqual(rec.evs.some((e) => e.type === 'move'), false)
         assertFile(`${fd}/big.bin`, OLD, '目標須為舊檔')

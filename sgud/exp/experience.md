@@ -35,6 +35,18 @@
 - **假伺服器之 STOR 須比照真實伺服器逐段寫檔**(收到指令即建立檔案);事後整檔寫入會在客戶端已刪除暫存後把它重建,使「無殘檔」斷言失準.
 - **清理與還原邏輯之盲點由唯讀獨立複審抓到**(重連之新連線無 `'error'` 監聽、交換退路斷線不重連、quit 與重連交錯拋 TypeError):逾時/斷線/重連之交錯,自寫測試易只覆蓋「逾時」一路,須另列「斷線」與「quit」兩軸.
 
+## 連線生命週期:逾時、隱式重連、conn 錯誤(2026-11-28;jsftp 2.1.3、ssh2-sftp-client 12.1.1、ssh2 1.17.0)
+
+- **jsftp `execute` 於控制 socket 不可寫時自行重建連線**(重新登入、不重放 `cwd`,且上一條之指令佇列若有進行中指令則新連線永遠送不出);停用法:覆寫實例之 `execute`,socket 不可寫即以錯誤呼叫回調.`Jsftp` 建構即連線,`'data'` 事件含 220 歡迎訊息;`'error'` 無監聽者使行程中止.
+- **ssh2-sftp-client `cwd()` 不收參數**(只回登入資料夾),`pwd` 方法不存在;原版 `ftp.cwd(x)` 在 SFTP 成功回傳卻不生效,是「寫到別處並回成功」之同形.其全域監聽預設寫 console(含主機訊息),建構子第 2 參數可傳靜默回調.
+- **`endCalled=true` 銷毀 SFTP 連線後,進行中之 promise 可能永不結束**(`fastGet` 之回呼送往死通道);凡要使其結束者,須自掛連線死亡事件(`onDead`)以固定訊息 reject,且用 `setImmediate` 讓函式庫自身之錯誤先行(伺服器斷線時沿用原錯誤).
+- **ssh2-sftp-client 之遞迴 `mkdir` 處理不了含 `..` 之路徑**(父層未建時對 `<父>/..` 建立而失敗);含 `..` 者改逐層 `stat`(跟隨連結)後建立,其餘沿用其遞迴(其 `exists` 用 `lstat`,逐層呼叫會把符號連結資料夾判為非資料夾).
+- **字面正規化路徑(`posix.join/normalize`)與伺服器解析 `..` 不一定相同**(符號連結);工作資料夾解析只串接,`..` 交伺服器.
+- **就緒等待與重連之競態只有唯讀獨立複審抓到**(嘗試期間另行 `conn`,回傳未就緒之新連線;上傳中止清空連線於未重放時即清;控制連線關閉不釋放數據 socket);自寫案偏重「逾時」,須另列「conn／quit 交錯」「僅控制連線關閉」兩軸.
+- **下游測試是相容性金絲雀**:`conn` 失敗後 `quit` 由「成功」改「reject 未連線」會使下游兩案失敗;改連線生命週期前先 Grep 下游對 `quit`／訊息之斷言.沙箱複本跑法:複本放 `tmp/<任務>/ds`,以 `module.registerHooks` 把裸名匯入導向下游 `node_modules`、`w-ftp` 導向要驗之 `src`(`NODE_OPTIONS=--import=…`),改前改後各跑一次比對.
+- **等價／備援之守門**:`reqLink` 之死連線檢查、下載取得 socket 前之 `onDead`、`guardExecute` 三者互為備援,單一變異存活屬正常;可觀察之判準是伺服器累計連線數(隱式重連會多出一條).
+- **修正本身之缺陷由第二輪唯讀複審抓到**(收窄只審上一輪修改):一律 `release()` 會銷毀併發下載之數據 socket(jsftp 之 `_pasvSocket` 只記最後一個);共用之重新連線嘗試被某一等待者取消時波及他人;取消後未即清除 `pending`,緊接之要求併入已取消者;`quit` 收尾之取消須限定其所關閉之連線.這類時序以假連線之單元測試(閘門控制就緒)可決定性重現,比經假伺服器快且穩.
+
 ## opt 讀取收斂至 wsemi `getOptReader`(2026-11-27,wsemi 1.9.82)
 
 - **只用 `.read` 之站點,`tag` 與 `opt.debug`、`opt.funLog` 皆不可由行為觀察**:`getOptReader` 之警告只在 `rd(key, def, check, …)` 檢測未過時才出,`.read(key)` 不檢測不警告;本庫(`downloadViaTemp`)只讀 `onTrace`、`fdDownloadTemp` 之原值,檢測交下游(`getTrace`、`resolveFdTemp`).故「接線」之行為證據取 `getOptReader` 於呼叫時必讀 `opt.debug` 一次(以 Proxy 記錄讀取之鍵,`debug` 非 true 時不讀 `funLog`),`tag` 只能以原始碼掃描釘住.

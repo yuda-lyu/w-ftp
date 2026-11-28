@@ -27,10 +27,10 @@ import ftpSyncToLocal from './ftpSyncToLocal.mjs'
 import ftpSyncToRemote from './ftpSyncToRemote.mjs'
 import downloadViaTemp from './downloadViaTemp.mjs'
 import uploadViaTemp from './uploadViaTemp.mjs'
+import connKeeper from './connKeeper.mjs'
 
 
 function CoreFTP(opt = {}) {
-    let Ftp = null
 
     //hostname
     let hostname = get(opt, 'hostname')
@@ -72,11 +72,11 @@ function CoreFTP(opt = {}) {
     let fdDownloadTemp = downloadViaTemp.resolveFdTemp(get(opt, 'fdDownloadTemp'), downloadViaTemp.fdTempDefault)
 
 
-    //cwds, 使用者以cwd成功切換過之路徑(依序), 上傳逾時後重新連線時重放, 使其後相對路徑指向同一資料夾
+    //cwds, 使用者以cwd成功切換過之路徑(依序), 重新連線時重放, 使其後相對路徑指向同一資料夾
     let cwds = []
 
 
-    //newJsftp, 以本實例之設定建立連線(conn與上傳之重新連線共用)
+    //newJsftp, 以本實例之設定建立連線
     function newJsftp() {
         return new Jsftp({
             host: hostname, //hostname or ip
@@ -87,8 +87,14 @@ function CoreFTP(opt = {}) {
     }
 
 
-    //hardDestroy, jsftp的destroy對socket僅做end()軟關閉, 對端不回FIN時socket殘留使行程無法退出, 故須於destroy前先取出socket參照再硬關閉
-    function hardDestroy(conn) {
+    //hardDestroy, jsftp的destroy對socket僅做end()軟關閉, 對端不回FIN時socket殘留使行程無法退出, 故須於destroy前先取出socket參照再硬關閉;
+    //  bKeepBusy為true時(伺服器僅關閉控制連線)保留下載中之數據socket, 其完成與否由大小核對判定
+    function hardDestroy(conn, bKeepBusy = false) {
+
+        //check, 保留下載中之數據socket: 先自jsftp摘除, 其destroy亦不對之end()
+        if (bKeepBusy && get(conn, ['_pasvSocket', 'wftpBusy']) === true) {
+            conn._pasvSocket = undefined
+        }
 
         //socket, destroy內會將socket與_pasvSocket設為undefined, 故須先取出參照
         let s = conn.socket
@@ -111,21 +117,135 @@ function CoreFTP(opt = {}) {
     }
 
 
-    async function ftpConn() {
-
-        //pm
-        let pm = genPm()
-
-        try {
-            Ftp = newJsftp()
-            cwds = []
-            pm.resolve('ok')
+    //guardExecute, 停用jsftp之隱式重連: jsftp.execute於控制socket不可寫時自行另建連線並重新登入而不重放cwd, 相對路徑即指向登入目錄;
+    //  改為該指令以錯誤結束, 重新連線一律由本套件進行並重放cwd
+    function guardExecute(link) {
+        let client = link.client
+        let execute = client.execute
+        client.execute = function(action, callback) {
+            if (link.dead || !this.socket || !this.socket.writable) {
+                link.markDead('CLOSED')
+                if (isfun(callback)) {
+                    setImmediate(() => {
+                        callback(new Error('connection closed'))
+                    })
+                }
+                return
+            }
+            return execute.call(this, action, callback)
         }
-        catch (err) {
-            pm.reject(err)
-        }
+    }
 
-        return pm
+
+    //openLink, 建立一條新連線(conn與重新連線共用), 收到伺服器之歡迎訊息(220)才算就緒
+    function openLink() {
+        let client = newJsftp()
+        let link = connKeeper.genLink(client, hardDestroy)
+        guardExecute(link)
+
+        //'error', 常駐監聽: 控制連線之錯誤(連不上、被重置等)無監聽者時EventEmitter拋出使行程中止
+        client.on('error', (err) => {
+            link.markDead(connKeeper.codeOfConn(err))
+        })
+        let sock = client.socket
+        sock.on('end', () => {
+            link.markDead('CLOSED')
+        })
+        sock.on('close', () => {
+            link.markDead('CLOSED')
+        })
+
+        link.setReady(new Promise((resolve, reject) => {
+            let onData = (res) => {
+                if (res.isMark) {
+                    return
+                }
+                client.removeListener('data', onData)
+                if (res.code === 220) {
+                    resolve()
+                }
+                else {
+                    reject(String(res.code))
+                }
+            }
+            client.on('data', onData)
+            link.onDead(() => {
+                reject(link.code)
+            })
+        }))
+
+        return link
+    }
+
+
+    //isReply, 錯誤是否為伺服器之回應(code為FTP回應碼)
+    function isReply(err) {
+        return typeof get(err, 'code') === 'number'
+    }
+
+
+    //mapErr, 伺服器之回應沿用原錯誤; 控制連線中斷與數據連線錯誤回固定訊息
+    function mapErr(err, link, op) {
+        if (isReply(err)) {
+            return err
+        }
+        if (link.dead) {
+            return connKeeper.msgClosed(op, link.code)
+        }
+        if (isestr(get(err, 'code'))) {
+            return connKeeper.msgFailed(op, connKeeper.codeOfConn(err))
+        }
+        return err
+    }
+
+
+    //reqOn, 於連線link執行回調式指令send(client, cb), 以limit毫秒計時(到時銷毀該連線; null不計時); onClosed為回覆前控制連線中斷之後續處置
+    function reqOn(link, send, { op, limit, msgTimeout, stage, trace = null, onClosed = null }) {
+        let run = (client) => {
+            return new Promise((resolve, reject) => {
+                send(client, (err, data) => {
+                    if (err) {
+                        reject(err)
+                    }
+                    else {
+                        resolve(data)
+                    }
+                })
+            })
+        }
+        return connKeeper.reqLink(link, run, { op, timeLimit: limit, msgTimeout, stage, trace, mapErr, onClosed })
+    }
+
+
+    //rawOn, 於連線link送出單一指令
+    function rawOn(link, name, fpRemote, { op, limit = timeLimit, stage, trace = null }) {
+        let send = (client, cb) => {
+            client.raw(name, fpRemote, cb)
+        }
+        return reqOn(link, send, { op, limit, msgTimeout: `ftpRaw[${name}] timeout[${limit}]`, stage, trace })
+    }
+
+
+    //replay, 重新連線後依序重放成功過之cwd
+    async function replay(link, limit) {
+        for (let fd of [...cwds]) {
+            await rawOn(link, 'cwd', fd, { op: 'ftpCwd', limit, stage: 'reconnect' })
+        }
+    }
+
+
+    //keeper, 控制連線被伺服器關閉(閒置逾時等)或由本套件銷毀(逾時)者, 下一個操作重新連線並重放cwd
+    let keeper = connKeeper({
+        open: openLink,
+        canReconnect: () => true,
+        replay,
+        timeLimit,
+    })
+
+
+    async function ftpConn(optCall = {}) {
+        cwds = []
+        return keeper.connect(downloadViaTemp.traceOf(optCall))
     }
 
 
@@ -150,149 +270,112 @@ function CoreFTP(opt = {}) {
     }
 
 
-    async function ftpLs(fdRemote = '.') {
+    async function ftpLs(fdRemote = '.', optCall = {}) {
 
-        //pm
-        let pm = genPm()
+        //acquire
+        let trace = downloadViaTemp.traceOf(optCall)
+        let link = await keeper.acquire('ftpLs', trace)
 
-        //check
-        if (Ftp === null) {
-            pm.reject(`FTP has not been initialized. please use 'conn' to construct FTP`)
-            return pm
+        //ls
+        let send = (client, cb) => {
+            client.ls(fdRemote, cb)
         }
-
-        //timeLimit
-        let t = setTimeout(() => {
-            pm.reject(`ftpLs timeout[${timeLimit}]`)
-        }, timeLimit)
-
-        Ftp.ls(fdRemote, (err, res) => {
-
-            //clearTimeout
-            clearTimeout(t)
-
-            if (err) {
+        //onClosed, 列舉(LIST退路)自開數據連線, 控制連線中斷時一併釋放(否則殘留至jsftp之閒置逾時, 行程無法退出)
+        let onClosed = (l) => l.release()
+        let res = await reqOn(link, send, { op: 'ftpLs', limit: timeLimit, msgTimeout: `ftpLs timeout[${timeLimit}]`, stage: 'ls', trace, onClosed })
+            .catch((err) => {
                 //有些伺服器會回傳empty string(由jsftp.js提示), 故可能無法進行ls列舉, 且其回傳: Could not retrieve a file listing for ooo
                 if (get(err, 'code') === 451) {
-                    pm.resolve([]) //視為資料夾內無任何資料夾與檔案
+                    return [] //視為資料夾內無任何資料夾與檔案
                 }
-                else {
-                    pm.reject(err)
-                }
-            }
-            else {
-                res = map(res, (v) => {
-                    v.mtime = ftpMsToTime(v.time)
-                    v.size = cint(v.size)
-                    v.isFolder = ftpIsFolderCore(v)
-                    return v
-                })
-                pm.resolve(res)
-            }
+                return Promise.reject(err)
+            })
+
+        res = map(res, (v) => {
+            v.mtime = ftpMsToTime(v.time)
+            v.size = cint(v.size)
+            v.isFolder = ftpIsFolderCore(v)
+            return v
         })
 
-        return pm
+        return res
     }
 
 
-    async function ftpQuit() {
+    async function ftpQuit(optCall = {}) {
 
         //pm
         let pm = genPm()
 
         //check
-        if (Ftp === null) {
-            pm.reject(`FTP has not been initialized. please use 'conn' to construct FTP`)
+        let link = keeper.current()
+        if (link === null) {
+            pm.reject(connKeeper.msgNotInit)
             return pm
         }
 
-        //conn, 固定本次欲關閉之連線: 期間上傳之重新連線或另一次quit可能改變Ftp
-        let conn = Ftp
+        //finish, 硬關閉本次欲關閉之連線, 仍為目前連線者清空(期間上傳之重新連線或另一次quit可能改變目前連線)
+        let finish = (code) => {
+            link.destroy(code)
+            keeper.clearIf(link)
+            keeper.cancelPending(link) //針對本連線之進行中重新連線一併取消
+        }
 
-        //destroyAndClear, 硬關閉該連線, 仍為目前連線者清空
-        let destroyAndClear = () => {
+        //check, 已中斷或尚未就緒之連線僅清理(不另建連線送QUIT)
+        if (link.dead || !link.ready) {
+            finish()
+            pm.resolve('ok')
+            return pm
+        }
 
-            //hardDestroy
-            hardDestroy(conn)
-
-            //clear
-            if (Ftp === conn) {
-                Ftp = null
+        let trace = downloadViaTemp.traceOf(optCall)
+        let done = false
+        let off = () => {}
+        let end = (fn, v) => {
+            if (done) {
+                return
             }
-
+            done = true
+            clearTimeout(t)
+            off()
+            fn(v)
         }
 
         //timeLimit
         let t = setTimeout(() => {
+            if (trace) {
+                trace('timeout', { timeLimit, stage: 'quit' })
+            }
+            end(pm.reject, `ftpQuit timeout[${timeLimit}]`)
+            finish('TIMEOUT')
+        }, Math.min(timeLimit, downloadViaTemp.msTimerMax))
 
-            //destroyAndClear
-            destroyAndClear()
+        //onDead, 伺服器未回覆QUIT即中斷連線; 本套件自行銷毀者(如另一次quit逾時)由本次計時器結束
+        off = link.onDead(() => {
+            if (link.dropped) {
+                return
+            }
+            setImmediate(() => {
+                end(pm.reject, connKeeper.msgClosed('ftpQuit', link.code))
+                finish()
+            })
+        })
 
-            pm.reject(`ftpQuit timeout[${timeLimit}]`)
-        }, timeLimit)
-
-        conn.raw('quit', (err, res) => {
-
-            //clearTimeout
-            clearTimeout(t)
-
-            //destroyAndClear
-            destroyAndClear()
-
-            //check, 逾時路徑硬關閉socket後可能觸發jsftp回調此處, 此時pm已reject, 下列resolve、reject不作用
+        link.client.raw('quit', (err, res) => {
             if (err) {
-                pm.reject(err)
+                end(pm.reject, isReply(err) ? err : connKeeper.msgClosed('ftpQuit', link.code || 'CLOSED'))
             }
             else {
-                pm.resolve(res)
+                end(pm.resolve, res)
             }
+            finish()
         })
 
         return pm
     }
 
 
-    async function ftpRaw(name, fpRemote) {
-
-        //pm
-        let pm = genPm()
-
-        //check
-        if (Ftp === null) {
-            pm.reject(`FTP has not been initialized. please use 'conn' to construct FTP`)
-            return pm
-        }
-
-        //timeLimit
-        let t = setTimeout(() => {
-            pm.reject(`ftpRaw[${name}] timeout[${timeLimit}]`)
-        }, timeLimit)
-
-        //raw
-        Ftp.raw(name, fpRemote, (err, data) => {
-
-            //clearTimeout
-            clearTimeout(t)
-
-            if (err) {
-                pm.reject(err)
-            }
-            else {
-                // console.log('ftpRaw then', fpRemote, data)
-                pm.resolve(data)
-            }
-        })
-
-        return pm
-    }
-
-
-    async function ftpMkdirCore(fpRemote) {
-        return ftpRaw('mkd', fpRemote)
-    }
-
-
-    async function ftpMkdir(fpRemote) {
+    async function ftpMkdir(fpRemote, optCall = {}) {
         //輸入為檔案路徑, 會解析出父資料夾並進行逐層創建
 
         //sepTreeFolders
@@ -301,12 +384,14 @@ function CoreFTP(opt = {}) {
 
         //若有多層資料夾才mkdir
         if (size(sstf) >= 1) {
+            let trace = downloadViaTemp.traceOf(optCall)
+            let link = await keeper.acquire('ftpMkdir', trace)
             await pmSeries(sstf, async (fd) => {
                 // console.log('call ftpIsFolder', fd)
-                let b = await ftpIsFolder(fd)
-                if (!b) {
+                let file = await statOn(link, fd, { op: 'ftpMkdir', limit: timeLimit, stage: 'mkdir', trace })
+                if (!ftpIsFolderCore(file)) {
                     // console.log('call ftpMkdirCore', fd)
-                    await ftpMkdirCore(fd)
+                    await rawOn(link, 'mkd', fd, { op: 'ftpMkdir', stage: 'mkdir', trace })
                     // console.log('ftpMkdir', fd)
                 }
             })
@@ -317,19 +402,15 @@ function CoreFTP(opt = {}) {
     }
 
 
-    async function ftpMlst(fpRemote) {
-        return ftpRaw('mlst', fpRemote)
-    }
-
-
-    async function ftpSize(fpRemote) {
-        return ftpRaw('size', fpRemote)
-    }
-
-
-    async function ftpCwd(fpRemote) {
-        let r = await ftpRaw('cwd', fpRemote)
-        //記錄成功切換之路徑, 供上傳之重新連線重放; 絕對路徑不依賴先前者, 只需記它
+    async function ftpCwd(fpRemote, optCall = {}) {
+        let trace = downloadViaTemp.traceOf(optCall)
+        let link = await keeper.acquire('ftpCwd', trace)
+        let r = await rawOn(link, 'cwd', fpRemote, { op: 'ftpCwd', stage: 'cwd', trace })
+        //check, 回覆前已另行conn或quit: 本次切換不屬於目前連線, 不記錄亦不回成功
+        if (keeper.current() !== link) {
+            return Promise.reject(connKeeper.msgClosed('ftpCwd', 'REPLACED'))
+        }
+        //記錄成功切換之路徑, 供重新連線重放; 絕對路徑不依賴先前者, 只需記它
         if (String(fpRemote).startsWith('/')) {
             cwds = [fpRemote]
         }
@@ -340,32 +421,34 @@ function CoreFTP(opt = {}) {
     }
 
 
-    async function ftpPwd() {
-        return ftpRaw('pwd')
+    async function ftpPwd(optCall = {}) {
+        let trace = downloadViaTemp.traceOf(optCall)
+        let link = await keeper.acquire('ftpPwd', trace)
+        return rawOn(link, 'pwd', undefined, { op: 'ftpPwd', stage: 'pwd', trace })
     }
 
 
-    async function ftpStateTar(fpRemote) {
+    //statOn, 於連線link查詢遠端檔案資訊(MLST與SIZE): 伺服器回應之錯誤記入結果之err, 連線中斷與逾時reject; limit為null時不計時(由呼叫端計時)
+    async function statOn(link, fpRemote, { op, limit, stage = 'stat', trace = null }) {
 
-        //check
-        if (Ftp === null) {
-            return Promise.reject(`FTP has not been initialized. please use 'conn' to construct FTP`)
+        //cmd, 伺服器回應之錯誤轉為{ err }
+        let cmd = (name) => {
+            return rawOn(link, name, fpRemote, { op, limit, stage, trace })
+                .catch((err) => {
+                    if (typeof err === 'string') { //本套件之固定訊息(連線中斷、逾時、數據連線錯誤)
+                        return Promise.reject(err)
+                    }
+                    return {
+                        err: err.toString(),
+                    }
+                })
         }
 
         //r
         let r = {}
 
-        //ftpMlst
-        let rmlst = null
-        await ftpMlst(fpRemote)
-            .then((res) => {
-                rmlst = res
-            })
-            .catch((err) => {
-                rmlst = {
-                    err: err.toString(),
-                }
-            })
+        //mlst
+        let rmlst = await cmd('mlst')
         // console.log('rmlst', rmlst)
         // raw mlst data => {
         //   code: 250,
@@ -416,17 +499,8 @@ function CoreFTP(opt = {}) {
             }
         }
 
-        //ftpSize
-        let rsize = null
-        await ftpSize(fpRemote)
-            .then((res) => {
-                rsize = res
-            })
-            .catch((err) => {
-                rsize = {
-                    err: err.toString(),
-                }
-            })
+        //size
+        let rsize = await cmd('size')
         // console.log('rsize', rsize)
         // raw size => { code: 213, text: '213 1384928', isMark: false, isError: false }
         // => 1384928
@@ -451,6 +525,13 @@ function CoreFTP(opt = {}) {
 
         // console.log('ftpStateTar', r)
         return r
+    }
+
+
+    async function ftpStateTar(fpRemote, optCall = {}) {
+        let trace = downloadViaTemp.traceOf(optCall)
+        let link = await keeper.acquire('ftpStat', trace)
+        return statOn(link, fpRemote, { op: 'ftpStat', limit: timeLimit, trace })
     }
 
 
@@ -481,10 +562,10 @@ function CoreFTP(opt = {}) {
     }
 
 
-    async function ftpIsFolder(fpRemote) {
+    async function ftpIsFolder(fpRemote, optCall = {}) {
 
         //ftpStateTar
-        let fd = await ftpStateTar(fpRemote)
+        let fd = await ftpStateTar(fpRemote, optCall)
         // console.log('ftpIsFolder ftpStateTar', fpRemote, 'fd', fd)
 
         //ftpIsFolderCore
@@ -522,10 +603,10 @@ function CoreFTP(opt = {}) {
     }
 
 
-    async function ftpIsFile(fpRemote) {
+    async function ftpIsFile(fpRemote, optCall = {}) {
 
         //ftpStateTar
-        let file = await ftpStateTar(fpRemote)
+        let file = await ftpStateTar(fpRemote, optCall)
         // console.log('ftpIsFile ftpStateTar', fpRemote, 'file', file)
 
         //ftpIsFileCore
@@ -541,8 +622,8 @@ function CoreFTP(opt = {}) {
         let pm = genPm()
 
         //check
-        if (Ftp === null) {
-            pm.reject(`FTP has not been initialized. please use 'conn' to construct FTP`)
+        if (keeper.current() === null) {
+            pm.reject(connKeeper.msgNotInit)
             return pm
         }
 
@@ -569,9 +650,39 @@ function CoreFTP(opt = {}) {
             fsCreateFolder(fdLocal)
         }
 
-        //ftpStateTar
-        let file = await ftpStateTar(fpRemote)
+        //link, 本次下載固定使用此連線
+        let link = null
+        let errConn = null
+        await keeper.acquire('ftpDownload', downloadViaTemp.traceOf(optCall))
+            .then((v) => {
+                link = v
+            }, (err) => {
+                errConn = err
+            })
+        if (errConn !== null) {
+            pm.reject(errConn)
+            return pm
+        }
+
+        //statOn, 查詢遠端檔案資訊階段以timeLimit計時, 到時銷毀本次所用之連線
+        let errStat = null
+        let file = await downloadViaTemp.withTimeLimit({
+            run: () => statOn(link, fpRemote, { op: 'ftpDownload', limit: null }),
+            timeLimit,
+            stage: 'stat',
+            optCall,
+            onTimeout: () => link.destroy('TIMEOUT'),
+        })
+            .catch((err) => {
+                errStat = err
+            })
         // console.log('file', file)
+
+        //check
+        if (errStat !== null) {
+            pm.reject(errStat)
+            return pm
+        }
 
         //ftpIsFileCore
         let b = ftpIsFileCore(file)
@@ -592,7 +703,7 @@ function CoreFTP(opt = {}) {
         //fileSize
         let fileSize = get(file, 'size', '')
 
-        //check, 取不到遠端大小(如SIZE指令失敗, ftpStateTar此時回size為0)即無從核對是否下載完整, 預設拒絕
+        //check, 取不到遠端大小(如SIZE指令失敗, statOn此時回size為0)即無從核對是否下載完整, 預設拒絕
         if (!isnum(fileSize) || haskey(get(file, 'rsize'), 'err')) {
             pm.reject(`can not get the size of file[${fpRemote}]`)
             return pm
@@ -601,13 +712,10 @@ function CoreFTP(opt = {}) {
         // console.log('fileSize', fileSize)
 
         //check, 查詢期間已quit
-        if (Ftp === null) {
-            pm.reject(`FTP has not been initialized. please use 'conn' to construct FTP`)
+        if (keeper.current() === null) {
+            pm.reject(connKeeper.msgNotInit)
             return pm
         }
-
-        //Ftp, 固定本次所用之連線, 避免傳輸期間quit將Ftp設為null
-        let FtpNow = Ftp
 
         //downloadViaTemp, 先寫入暫存區, 傳輸成功且大小相符才移至fpLocal, 舊fpLocal於此之前不動; 逾時(timeLimit)自傳輸開始起計
         //  數據socket關閉不代表傳完(連線中途正常關閉或被重置時jsftp皆不回報錯誤), 故完成與否以大小核對判定
@@ -620,25 +728,38 @@ function CoreFTP(opt = {}) {
             transfer: (fpTemp, ctl) => {
                 return new Promise((resolve, reject) => {
 
-                    FtpNow.get(fpRemote, (err, socket) => {
+                    //socket, 數據socket
+                    let socket = null
+
+                    //setAbort, 逾時時銷毀數據socket與本次所用之控制連線(伺服器停滯時其指令佇列已不可用)
+                    ctl.setAbort(() => {
+                        if (socket !== null) {
+                            socket.destroy()
+                        }
+                        link.destroy('TIMEOUT')
+                    })
+
+                    //onDead, 取得數據socket前控制連線中斷(含傳輸開始前即已中斷)即結束(jsftp不回呼進行中之指令); 取得後以數據socket與大小核對判定
+                    let off = link.onDead(() => {
+                        setImmediate(() => {
+                            if (socket === null) {
+                                reject(connKeeper.msgClosed('ftpDownload', link.code))
+                                link.release() //釋放尚未交付之數據socket
+                            }
+                        })
+                    })
+
+                    link.client.get(fpRemote, (err, s) => {
+                        off()
 
                         //check, 取得數據socket失敗(如425)時尚未寫入任何內容
                         if (err) {
-                            reject(err)
+                            reject(link.dead && !isReply(err) ? connKeeper.msgClosed('ftpDownload', link.code) : err)
                             return
                         }
 
-                        //check, 已逾時才取得socket者直接關閉, 不寫入
-                        if (!ctl.active()) {
-                            socket.destroy()
-                            reject(`ftpDownload timeout[${timeLimit}]`)
-                            return
-                        }
-
-                        //setAbort, 逾時時銷毀數據socket以停止傳輸
-                        ctl.setAbort(() => {
-                            socket.destroy()
-                        })
+                        socket = s
+                        s.wftpBusy = true //下載中之數據socket, 控制連線中斷時不予釋放
 
                         //createWriteStream, 寫入暫存檔
                         let writer = fs.createWriteStream(fpTemp)
@@ -892,37 +1013,38 @@ function CoreFTP(opt = {}) {
 
 
     //genUploadAdapter, 上傳流程(uploadViaTemp)之FTP操作, 固定使用本次上傳開始時之連線; 逾時時銷毀該連線(含數據socket)並重新連線
-    function genUploadAdapter(fpLocal, fpRemote, fileSize, cbProcess, emit) {
-        let conn = Ftp
+    function genUploadAdapter(linkStart, fpLocal, fpRemote, fileSize, cbProcess, emit) {
+        let link = linkStart
         let dead = false
         let stopPut = null
-        let reconnectingFrom = null //重新連線(重放cwd)進行中之舊連線
+        let cancel = null //取消本次重新連線嘗試
 
         let abortConn = () => {
             dead = true
-            hardDestroy(conn)
+            link.destroy()
         }
 
         //dropConn, 銷毀指定連線(指令佇列已不可用); 為目前所用者另記為待重新連線. 逾時後才到之舊連線錯誤不影響重新連線之新連線
-        let dropConn = (c) => {
-            if (c === conn) {
+        let dropConn = (l) => {
+            if (l === link) {
                 abortConn()
             }
             else {
-                hardDestroy(c)
+                l.destroy()
             }
         }
 
         //lost, 非伺服器回應之錯誤(連線關閉或出錯)時銷毀送出該指令之連線, 其後之清理重新連線
-        let lost = (c) => (err) => {
-            if (typeof get(err, 'code') !== 'number') {
-                dropConn(c)
+        let lost = (l) => (err) => {
+            if (!isReply(err)) {
+                dropConn(l)
             }
             return Promise.reject(err)
         }
 
         let cmd = (name, ...args) => {
-            return cmdOn(conn, name, ...args).catch(lost(conn))
+            let l = link
+            return cmdOn(l.client, name, ...args).catch(lost(l))
         }
 
         //isFile, 以MLST之type判斷(避免把資料夾當檔案搬走); MLST不支援者以SIZE判斷
@@ -959,7 +1081,7 @@ function CoreFTP(opt = {}) {
                         b = get(r, 'text', '').indexOf('type=dir;') >= 0
                     }
                     catch (err) {
-                        if (typeof get(err, 'code') !== 'number') {
+                        if (!isReply(err)) {
                             throw err
                         }
                     }
@@ -974,13 +1096,13 @@ function CoreFTP(opt = {}) {
                     await cmd('type', 'I')
                 }
                 catch (err) {
-                    if (typeof get(err, 'code') !== 'number') {
+                    if (!isReply(err)) {
                         throw err
                     }
                 }
-                let c = conn
+                let l = link
                 await putStream({
-                    conn: c,
+                    conn: l.client,
                     fpLocal,
                     fpTemp,
                     active,
@@ -1004,7 +1126,7 @@ function CoreFTP(opt = {}) {
                         stopPut = fn
                     },
                     onDirty: () => {
-                        dropConn(c)
+                        dropConn(l)
                     },
                 })
             },
@@ -1018,11 +1140,11 @@ function CoreFTP(opt = {}) {
             },
             isFile,
             rename: (fpFrom, fpTo) => {
-                let c = conn
-                return sendOn(c, (cb) => {
-                    c.rename(fpFrom, fpTo, cb) //RNFR後RNTO
+                let l = link
+                return sendOn(l.client, (cb) => {
+                    l.client.rename(fpFrom, fpTo, cb) //RNFR後RNTO
                 })
-                    .catch(lost(c))
+                    .catch(lost(l))
             },
             remove: (fp) => {
                 return cmd('dele', fp)
@@ -1041,57 +1163,38 @@ function CoreFTP(opt = {}) {
                 if (stopPut !== null) {
                     stopPut()
                 }
-                //重新連線中遭中止者工作目錄未能還原, 不沿用舊連線(須重新conn)
-                if (reconnectingFrom !== null && Ftp === reconnectingFrom) {
-                    Ftp = null
+                //取消本次重新連線嘗試: 重放cwd中被取消者視為重放失敗而清空連線(須重新conn), 尚未連上者保留舊連線供下一個操作再試
+                if (cancel !== null) {
+                    cancel()
+                    cancel = null
                 }
             },
             reconnect: async () => {
                 if (!dead) {
                     return
                 }
-                //使用者已quit者不重新連線; 已另行conn者改用其新連線
-                if (Ftp === null) {
-                    throw new Error('FTP has quit')
-                }
-                if (Ftp !== conn) {
-                    conn = Ftp
-                    dead = false
-                    return
-                }
-                let old = conn
-                let c = newJsftp()
-                c.on('error', () => {}) //重新連線之連線可能閒置(無指令監看), 其'error'無監聽者時使行程中止
-                conn = c
-                reconnectingFrom = old
+                //使用者已quit者不重新連線; 已另行conn或他方已換上新連線者改用之
+                let r = null
                 try {
-                    for (let fd of cwds) {
-                        await cmdOn(c, 'cwd', fd) //重放使用者之工作目錄, 使相對路徑指向同一資料夾
-                    }
+                    r = await keeper.reconnect(link, {
+                        setCancel: (fn) => {
+                            cancel = fn
+                        },
+                    })
                 }
-                catch (err) {
-                    hardDestroy(c)
-                    if (Ftp === old) {
-                        Ftp = null //工作目錄無法還原, 不沿用(免相對路徑指向他處), 須重新conn
-                    }
-                    reconnectingFrom = null
-                    emit('reconnect', { ok: false })
-                    throw err
-                }
-                reconnectingFrom = null
-                if (Ftp === old) {
-                    Ftp = c
-                }
-                else {
-                    hardDestroy(c)
-                    if (Ftp === null) {
+                catch (e) {
+                    cancel = null
+                    if (get(e, 'kind') !== 'quit') {
                         emit('reconnect', { ok: false })
-                        throw new Error('FTP connection was replaced')
                     }
-                    conn = Ftp //重放期間已由另一上傳或conn()換上新連線者改用之
+                    throw connKeeper.msgOfReconnect('ftpUpload', e)
                 }
+                cancel = null
+                if (r.reconnected) {
+                    emit('reconnect', { ok: true })
+                }
+                link = r.link
                 dead = false
-                emit('reconnect', { ok: true })
             },
         }
     }
@@ -1100,8 +1203,8 @@ function CoreFTP(opt = {}) {
     async function ftpUpload(fpLocal, fpRemote, cbProcess, optCall = {}) {
 
         //check
-        if (Ftp === null) {
-            return Promise.reject(`FTP has not been initialized. please use 'conn' to construct FTP`)
+        if (keeper.current() === null) {
+            return Promise.reject(connKeeper.msgNotInit)
         }
 
         //fpRemote
@@ -1132,6 +1235,9 @@ function CoreFTP(opt = {}) {
         fileSize = cint(fileSize)
         // console.log('fileSize', fileSize)
 
+        //link, 控制連線已中斷者於此重新連線並重放cwd
+        let link = await keeper.acquire('ftpUpload', downloadViaTemp.traceOf(optCall))
+
         //uploadViaTemp, 先寫入遠端暫存名, 傳輸成功且大小相符才改名為fpRemote, 失敗時刪除暫存、舊fpRemote不動; 各階段以timeLimit計時; 不改變工作目錄
         return uploadViaTemp({
             fpLocal,
@@ -1139,7 +1245,7 @@ function CoreFTP(opt = {}) {
             fileSize,
             timeLimit,
             optCall,
-            genAdapter: (emit) => genUploadAdapter(fpLocal, fpRemote, fileSize, cbProcess, emit),
+            genAdapter: (emit) => genUploadAdapter(link, fpLocal, fpRemote, fileSize, cbProcess, emit),
         })
     }
 

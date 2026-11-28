@@ -13,17 +13,25 @@
 
 ## 下載(`download`、`syncToLocal`;FTP 與 SFTP)
 
-- **現況**:規則 R-DL-01～R-DL-08 皆已實作(見 `sgud/rule/rulebook.md`;需求出處:使用端 Gitea #214):先寫暫存區、傳輸成功且大小相符才移至目標、失敗保留舊檔;SFTP 之 `timeLimit` 生效(含 stat 階段),FTP 逾時銷毀數據 socket;SFTP 之 `syncToLocal` 轉交 opt;`opt.onTrace` 事件;暫存區崩潰殘留清理;移動遇占用有界重試.預設 `timeLimit` 仍為 60000 毫秒、預設暫存區 `./_wftpDownloadTemp`.
+- **現況**:規則 R-DL-01～R-DL-08 皆已實作(見 `sgud/rule/rulebook.md`;需求出處:使用端 Gitea #214):先寫暫存區、傳輸成功且大小相符才移至目標、失敗保留舊檔;`timeLimit` 生效(兩協定含 stat 階段),逾時銷毀本次所用之連線、下一個操作自動重新連線;SFTP 之 `syncToLocal` 轉交 opt;`opt.onTrace` 事件;暫存區崩潰殘留清理;移動遇占用有界重試.預設 `timeLimit` 仍為 60000 毫秒、預設暫存區 `./_wftpDownloadTemp`.
 - **測試**:`test/unit-download-via-temp.test.mjs`(共用流程之單元測試,傳輸以替身、逾時與重試間隔以假時鐘)、`test/api-sftp-download-temp.test.mjs`、`test/api-ftp-download-temp.test.mjs`(真實 `WFtp` 經假伺服器之接線案);夾具 `test/lib/dlTestKit.mjs`、`fakeSftpServer`(`hooks.READ`、`OPEN`、`STAT`、`statSize`)、`fakeFtpServer`(`hooks.RETR`).
-- **已知缺口**:跨磁碟之實機驗證須兩磁碟(本機單碟時該案略過);`syncToLocal` 遇第一個失敗即停(語意不改);`ls` 之逾時於 SFTP 無效(`ftpLs` 等 `Ftp.list` 結束才回傳,`timeLimit` 到時不會使呼叫端結束),`syncToLocal`、`syncToRemote` 之列舉階段受此影響(未改).
-- **最近一次驗證**:2026-11-26(本機 Windows、Node 24.22、wsemi 1.9.78):全套 93 案(24 既有＋69 新)92 通過、1 略過(實機跨磁碟案,本機單碟);發布包解開之目錄(wsemi 1.9.79)同為 92 通過、1 略過;新測試三檔連跑 20 次皆通過.
+- **已知缺口**:跨磁碟之實機驗證須兩磁碟(本機單碟時該案略過);`syncToLocal` 遇第一個失敗即停(語意不改).
+- **最近一次驗證**:見下節〈連線生命週期〉.
 
 ## 上傳(`upload`、`syncToRemote`;FTP 與 SFTP)
 
-- **現況**:規則 R-UL-01～R-UL-08 皆已實作(見 `sgud/rule/rulebook.md`;需求出處:使用端 Gitea #214 §4 第 6 項):遠端同資料夾暫存名、大小核對後改名(SFTP posix-rename,不支援或被拒時退回 rename 與非原子交換)、失敗刪暫存且舊目標不動、各階段 `timeLimit` 到時銷毀連線並重連清理、FTP 串流讀本機檔且不再改變工作目錄、SFTP 改自寫並行寫入(不用 `fastPut`)、SFTP `syncToRemote` 轉交 opt、`upload` 第 4 參數 `onTrace`.
+- **現況**:規則 R-UL-01～R-UL-08 皆已實作(見 `sgud/rule/rulebook.md`;需求出處:使用端 Gitea #214 §4 第 6 項):遠端同資料夾暫存名、大小核對後改名(SFTP posix-rename,不支援或被拒時退回 rename 與非原子交換)、失敗刪暫存且舊目標不動、各階段 `timeLimit` 到時銷毀連線並重連清理(重新連線改經 `connKeeper`)、FTP 串流讀本機檔且不再改變工作目錄、SFTP 改自寫並行寫入(不用 `fastPut`)、SFTP `syncToRemote` 轉交 opt、`upload` 第 4 參數 `onTrace`.
 - **測試**:`test/unit-upload-via-temp.test.mjs`(共用流程,傳輸端替身、逾時以假時鐘)、`test/api-sftp-upload-temp.test.mjs`、`test/api-ftp-upload-temp.test.mjs`(真實 `WFtp` 經假伺服器)、`test/api-upload-stall-exit.test.mjs`(逾時後子行程自行退出);夾具 `test/lib/ulTestKit.mjs`、`clientUploadFlow.mjs`、`fakeSftpServer`(寫入、改名、posix-rename 擴充、`hooks.WRITE/RENAME/REMOVE/AUTH`)、`fakeFtpServer`(逐段寫入之 STOR、RNFR/RNTO/DELE、`hooks.STOR/CMD`、`renameOverwrite`).
-- **已知缺口**:崩潰或無法重連之遠端暫存名不自動清理;目標權限與符號連結不保留;FTP 之 `SIZE` 不支援者上傳一律失敗;jsftp 隱式重連(伺服器關閉閒置控制連線後)不重放 `cwd`(改版前即如此,所有操作皆受影響);`ftp.conn` 之連線錯誤無 `'error'` 監聽者時行程中止(改版前即如此,本套件只於上傳重新連線時掛監聽);公開 `mkdir` 與下載路徑仍沿用 `sepTreeFolders`,SFTP 根目錄為 `/` 之伺服器於 Windows 端遞迴建立相對路徑多層資料夾會無限遞迴(上傳路徑已繞開);真實 FTP 伺服器未實測(本機只有假伺服器;SFTP 另以 Git 內附之 OpenSSH `sftp-server` 實測 8 情境).
+- **已知缺口**:崩潰或無法重連之遠端暫存名不自動清理;目標權限與符號連結不保留;FTP 之 `SIZE` 不支援者上傳一律失敗;真實 FTP 伺服器未實測(本機只有假伺服器;SFTP 於第 658 項另以 Git 內附之 OpenSSH `sftp-server` 實測 8 情境,第 708 項之連線生命週期僅以假伺服器驗證).
 - **最近一次驗證**:2026-11-28(本機 Windows、Node 24.22、wsemi 1.9.83):全套 203 案,202 通過、1 略過(實機跨磁碟案,本機單碟);上傳四檔(103 案)連跑 10 次皆通過;變異 47 項全殺;建置冒煙(輸出至暫存)之 UMD 兩協定上傳成功;尚未發布.
+
+## 連線生命週期、逾時、重新連線與路徑(FTP 與 SFTP)
+
+- **現況**:規則 R-CN-01～R-CN-06 皆已實作(見 `sgud/rule/rulebook.md`;排程第 708 項,尚未發布):`conn` 就緒才 resolve 且連線錯誤以固定訊息 reject(不中止行程);所有公開操作之 `timeLimit` 生效且到時銷毀本次所用之連線;FTP 停用 jsftp 隱式重連、重新連線時重放 `cwd`(無法重放即須重新 `conn`);SFTP `cwd`/`pwd` 可用(由本套件保存工作資料夾);`mkdir`、`upload`、`syncToRemote` 之絕對路徑與含 `..`、`.` 起首名稱之路徑寫到正確位置;`conn` 等公開操作接受 `opt.onTrace`(`connect`、`reconnect`、`timeout`).
+- **測試**:`test/api-ftp-conn.test.mjs`、`test/api-sftp-conn.test.mjs`、`test/api-conn-exit.test.mjs`(子行程:不中止、可退出)、`test/unit-conn-keeper.test.mjs`、`test/unit-sep-tree-folders.test.mjs`;夾具 `test/lib/connTestKit.mjs`、`clientConnFlow.mjs`、`fakeFtpServer`(`home`、`greeting`、`keepData`、`dropControls`、`hooks.GREET/CMD`,CWD/MKD/PWD 比照真實伺服器)、`fakeSftpServer`(`home`、`dropClients`、`hooks.OPENDIR/READDIR/REALPATH/MKDIR/AUTH`).
+- **已知缺口**:含換行或結尾空白之 FTP 路徑受 jsftp 指令串接影響(改版前即如此);FTP `STAT` 列表含 `.`、`..` 之伺服器於同步列舉行為未改;`conn` 重複呼叫時前一條存活之連線不關閉(改版前即如此);下載之 `cbProcess` 拋錯仍中止行程(改版前即如此,上傳有保護);`syncToRemote` 之遠端資料夾須已存在;真實 FTP／SFTP 伺服器未實測.
+- **下游**:下游自有套件之測試(沙箱複本,指向本庫改前與改後之 `src`)結果相同(87 通過、3 失敗,3 案改前即敗,與本庫改動無關).
+- **最近一次驗證**:2026-11-28(本機 Windows、Node 24.22、wsemi 1.9.83):全套 308 案,307 通過、1 略過(實機跨磁碟案,本機單碟);連線、下載、上傳相關測試檔連跑 8 輪(定稿碼,各 217 通過、1 略過)與先前 12 輪皆無失敗;變異 62 項殺 61;`.jsdoc` 實跑無 ERROR;eslint 0;建置冒煙(輸出至暫存)之 UMD 兩協定 conn、cwd、上傳、下載、連不上皆如預期;尚未發布.
 
 ## 單次呼叫 opt 之讀取(`getOptReader`)
 

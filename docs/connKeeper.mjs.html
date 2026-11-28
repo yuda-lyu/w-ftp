@@ -1,0 +1,566 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    
+    <meta charset="utf-8">
+    <title>connKeeper.mjs - Documentation</title>
+    
+    
+    <script src="scripts/prettify/prettify.js"></script>
+    <script src="scripts/prettify/lang-css.js"></script>
+    <!--[if lt IE 9]>
+      <script src="//html5shiv.googlecode.com/svn/trunk/html5.js"></script>
+    <![endif]-->
+    <link type="text/css" rel="stylesheet" href="styles/prettify.css">
+    <link type="text/css" rel="stylesheet" href="styles/jsdoc.css">
+    <script src="scripts/nav.js" defer></script>
+    
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+</head>
+<body>
+
+<input type="checkbox" id="nav-trigger" class="nav-trigger" />
+<label for="nav-trigger" class="navicon-button x">
+  <div class="navicon"></div>
+</label>
+
+<label for="nav-trigger" class="overlay"></label>
+
+<nav >
+    
+    
+    <h2><a href="index.html">Home</a></h2><h3>Global</h3><ul><li><a href="global.html#WFtp">WFtp</a></li><li><a href="global.html#conn">conn</a></li><li><a href="global.html#connKeeper">connKeeper</a></li><li><a href="global.html#cwd">cwd</a></li><li><a href="global.html#download">download</a></li><li><a href="global.html#downloadViaTemp">downloadViaTemp</a></li><li><a href="global.html#genLink">genLink</a></li><li><a href="global.html#isFile">isFile</a></li><li><a href="global.html#isFolder">isFolder</a></li><li><a href="global.html#ls">ls</a></li><li><a href="global.html#mkdir">mkdir</a></li><li><a href="global.html#pwd">pwd</a></li><li><a href="global.html#quit">quit</a></li><li><a href="global.html#remoteSibling">remoteSibling</a></li><li><a href="global.html#reqLink">reqLink</a></li><li><a href="global.html#resolveFdTemp">resolveFdTemp</a></li><li><a href="global.html#stat">stat</a></li><li><a href="global.html#syncToLocal">syncToLocal</a></li><li><a href="global.html#syncToRemote">syncToRemote</a></li><li><a href="global.html#upload">upload</a></li><li><a href="global.html#uploadViaTemp">uploadViaTemp</a></li><li><a href="global.html#withTimeLimit">withTimeLimit</a></li></ul>
+    
+</nav>
+
+<div id="main">
+    
+    <h1 class="page-title">connKeeper.mjs</h1>
+    
+
+    
+
+
+
+    
+    <section>
+        <article>
+            <pre class="prettyprint source linenums"><code>import get from 'lodash-es/get.js'
+import genPm from 'wsemi/src/genPm.mjs'
+import isestr from 'wsemi/src/isestr.mjs'
+import isfun from 'wsemi/src/isfun.mjs'
+import getDiagBriefErr from 'wsemi/src/getDiagBriefErr.mjs'
+import downloadViaTemp from './downloadViaTemp.mjs'
+
+
+//本模組為單一實例之連線生命週期(SFTP與FTP共用, 單一擁有者): 建立與等待就緒、判定連線已死、逾時銷毀、重新連線(含重放)、請求之計時與固定訊息
+
+
+//msgNotInit, 未conn或已quit時之固定訊息(沿用原版)
+let msgNotInit = `FTP has not been initialized. please use 'conn' to construct FTP`
+
+
+//reCode, 就緒失敗之代碼(本套件代碼、FTP回應碼、codeOfConn之結果)可放入訊息者
+let reCode = /^[A-Z0-9_]{1,40}$/
+
+
+//codeOfConn, 取連線錯誤之代碼(固定詞彙), 不取message(其內含主機、路徑或伺服器原文): ssh2之認證與交握逾時層級、FTP回應碼(三位數), 其餘經wsemi getDiagBriefErr只收系統與Node之錯誤代碼; 取不到回'UNKNOWN'
+function codeOfConn(err) {
+    try {
+        let level = get(err, 'level') //ssh2之錯誤層級
+        if (level === 'client-authentication') {
+            return 'AUTHENTICATION'
+        }
+        if (level === 'client-timeout') {
+            return 'HANDSHAKE_TIMEOUT' //ssh2之readyTimeout(預設20000毫秒), 有別於本套件以timeLimit計時之'TIMEOUT'
+        }
+        let c = get(err, 'code')
+        if (Number.isInteger(c) &amp;&amp; c >= 100 &amp;&amp; c &lt;= 599) {
+            return String(c)
+        }
+        let brief = getDiagBriefErr(err)
+        return isestr(brief.errCode) ? brief.errCode : 'UNKNOWN'
+    }
+    catch (e) {
+        return 'UNKNOWN'
+    }
+}
+
+
+//固定訊息
+let msgClosed = (op, code) => `${op}: the connection to the server is closed (${code})`
+let msgFailed = (op, code) => `${op}: the connection to the server failed (${code})`
+let msgConnect = (code) => `ftpConn: can not connect to the server (${code})`
+let msgReconnect = (op, code) => `${op}: can not reconnect to the server (${code})`
+let msgRestore = (op, code) => `${op}: can not restore the working directory after reconnecting (${code}), please use 'conn' to construct FTP`
+
+
+/**
+ * 包裝一條傳輸端連線: 記錄是否已就緒、是否已死(關閉、出錯或由本套件銷毀)與死因代碼, 供進行中之請求得知連線中斷
+ *
+ * @param {Object} client 輸入傳輸端連線物件
+ * @param {Function} destroyRaw 輸入硬關閉該連線之函數(client, bKeepBusy), bKeepBusy為true時保留仍在傳輸中之數據連線
+ * @returns {Object} 回傳{ client, ready, dead, dropped, code, markDead(code), onDead(fn), destroy(code), release(), setReady(promise) }, dropped表示由本套件銷毀(如逾時)
+ */
+function genLink(client, destroyRaw) {
+    let fns = new Set()
+    let destroyed = false
+    let link = {
+        client,
+        ready: false,
+        dead: false,
+        dropped: false,
+        code: '',
+        readyPm: null,
+    }
+    link.markDead = (code) => {
+        if (link.dead) {
+            return
+        }
+        link.dead = true
+        link.code = code || 'CLOSED'
+        let fs = Array.from(fns)
+        fns.clear()
+        for (let fn of fs) {
+            fn()
+        }
+    }
+    //onDead, 連線死亡時呼叫fn(已死者於下一輪呼叫), 回傳解除函數
+    link.onDead = (fn) => {
+        if (link.dead) {
+            let on = true
+            setImmediate(() => {
+                if (on) {
+                    fn()
+                }
+            })
+            return () => {
+                on = false
+            }
+        }
+        fns.add(fn)
+        return () => {
+            fns.delete(fn)
+        }
+    }
+    let free = (bKeepBusy) => {
+        if (destroyed) {
+            return
+        }
+        destroyed = true
+        try {
+            destroyRaw(client, bKeepBusy)
+        }
+        catch (err) {}
+    }
+    //release, 釋放已中斷連線之殘留資源(如FTP之數據socket), 保留仍在傳輸中者; 不改變dropped(伺服器斷線者仍照其重新連線規則)
+    link.release = () => {
+        free(true)
+    }
+    //destroy, 硬關閉(不等待伺服器回應), 之後不再送出任何資料; code為死因代碼(逾時者'TIMEOUT')
+    link.destroy = (code) => {
+        link.dropped = true
+        link.markDead(code || 'CLOSED')
+        free(false)
+    }
+    //setReady, 登記連線就緒之promise(resolve即可使用, reject死因代碼)
+    link.setReady = (p) => {
+        link.readyPm = p
+        p.then(() => {
+            if (!link.dead) {
+                link.ready = true
+            }
+        }, () => {})
+    }
+    return link
+}
+
+
+//waitSettled, 等待連線就緒或死亡(未就緒者由建立方銷毀)
+function waitSettled(link) {
+    return new Promise((resolve) => {
+        let off = link.onDead(resolve)
+        link.readyPm.then(() => {
+            off()
+            resolve()
+        }, () => {})
+    })
+}
+
+
+//waitReady, 於timeLimit內等待連線就緒; reject死因代碼(逾時為'TIMEOUT'), 失敗之連線由呼叫端銷毀
+function waitReady(link, timeLimit) {
+    let pm = genPm()
+    let done = false
+    let off = () => {}
+    let end = (fn, v) => {
+        if (done) {
+            return
+        }
+        done = true
+        clearTimeout(t)
+        off()
+        fn(v)
+    }
+    let t = setTimeout(() => {
+        end(pm.reject, 'TIMEOUT')
+    }, Math.min(timeLimit, downloadViaTemp.msTimerMax))
+    off = link.onDead(() => end(pm.reject, link.code))
+    link.readyPm.then(() => {
+        if (link.dead) {
+            end(pm.reject, link.code)
+        }
+        else {
+            end(pm.resolve, link)
+        }
+    }, (code) => {
+        end(pm.reject, isestr(code) &amp;&amp; reCode.test(code) ? code : 'UNKNOWN')
+    })
+    return pm
+}
+
+
+/**
+ * 於指定連線執行一個請求: 以timeLimit計時, 到時reject固定訊息並銷毀該連線; 回覆前連線中斷即reject固定訊息; 傳輸端之錯誤經mapErr轉換
+ *
+ * @param {Object} link 輸入連線包裝物件
+ * @param {Function} run 輸入執行請求之函數, 回傳Promise
+ * @param {Object} o 輸入設定物件
+ * @param {String} o.op 輸入操作名稱字串, 供固定訊息使用
+ * @param {Integer} [o.timeLimit=null] 輸入逾時毫秒, 未給不計時(由呼叫端計時)
+ * @param {String} [o.msgTimeout] 輸入逾時訊息字串
+ * @param {String} [o.stage] 輸入觀察事件之階段名稱字串
+ * @param {Function} [o.trace=null] 輸入觀察回調
+ * @param {Function} o.mapErr 輸入錯誤轉換函數(err, link, op), 回傳reject之值
+ * @param {Function} [o.onClosed=null] 輸入回覆前連線中斷而reject後呼叫之函數(link)
+ * @returns {Promise} 回傳Promise
+ */
+function reqLink(link, run, o) {
+    let { op, timeLimit = null, msgTimeout, stage, trace = null, mapErr, onClosed = null } = o
+    let pm = genPm()
+    if (link.dead) {
+        pm.reject(msgClosed(op, link.code))
+        return pm
+    }
+    let done = false
+    let off = () => {}
+    let t = null
+    let end = (fn, v) => {
+        if (done) {
+            return
+        }
+        done = true
+        clearTimeout(t)
+        off()
+        fn(v)
+    }
+    if (timeLimit !== null) {
+        t = setTimeout(() => {
+            if (trace) {
+                trace('timeout', { timeLimit, stage })
+            }
+            end(pm.reject, msgTimeout)
+            link.destroy('TIMEOUT')
+        }, Math.min(timeLimit, downloadViaTemp.msTimerMax))
+    }
+    off = link.onDead(() => {
+        setImmediate(() => { //先讓同批抵達之回應處理完
+            if (done) {
+                return
+            }
+            end(pm.reject, msgClosed(op, link.code))
+            if (isfun(onClosed)) {
+                onClosed(link)
+            }
+        })
+    })
+    new Promise((resolve) => {
+        resolve(run(link.client))
+    })
+        .then((v) => {
+            end(pm.resolve, v)
+        }, (err) => {
+            setImmediate(() => end(pm.reject, mapErr(err, link, op))) //延後一輪, 使連線之關閉事件先行處理
+        })
+    return pm
+}
+
+
+/**
+ * 單一實例之連線保管者
+ *
+ * 重新連線: 僅canReconnect(link)為true之已死連線才重新連線(同一死連線併發要求者共用同一次嘗試); 就緒後執行replay(重放使用者狀態), 重放失敗即清空目前連線(須重新conn, 免於相對路徑指向他處);
+ * 連不上者保留死連線, 下一個操作再試; 嘗試期間另有conn換上新連線者改用之(待其就緒);
+ * 取消(reconnect之setCancel所給函數, 他方已併入同一嘗試者不取消; cancelPending(old)供quit)後之要求者另起新嘗試, 重放中取消者一併清空連線
+ *
+ * @param {Object} o 輸入設定物件
+ * @param {Function} o.open 輸入建立新連線之函數, 回傳連線包裝物件(已setReady)
+ * @param {Function} o.canReconnect 輸入判定死連線可否自動重新連線之函數(link)
+ * @param {Function} [o.replay=null] 輸入重新連線後重放使用者狀態之函數(link, timeLimit)
+ * @param {Integer} o.timeLimit 輸入逾時毫秒
+ * @returns {Object} 回傳{ current(), connect(trace), acquire(op, trace), reconnect(old, o), cancelPending(old), clearIf(link) }
+ */
+function connKeeper({ open, canReconnect, replay = null, timeLimit }) {
+    let current = null
+    let pending = null //進行中之重新連線{ old, p, joined(併入之他方數), replaying, cancel() }
+
+    //clearIf, 目前連線為link時清空
+    let clearIf = (link) => {
+        if (current === link) {
+            current = null
+        }
+    }
+
+    //connect, 建立新連線並等待就緒; 就緒前即為目前連線, 使conn未await即呼叫之操作能等待之
+    let connect = async (trace) => {
+        let emit = (type, data) => {
+            if (trace) {
+                trace(type, data)
+            }
+        }
+        let link = null
+        try {
+            link = open()
+        }
+        catch (err) {
+            let code = codeOfConn(err)
+            emit('connect', { ok: false, code })
+            return Promise.reject(msgConnect(code))
+        }
+        current = link
+        try {
+            await waitReady(link, timeLimit)
+        }
+        catch (code) {
+            //失敗之連線保留為目前連線(已死且未就緒): 操作視為未連線, quit照常完成(沿用原版SFTP於conn失敗後仍可quit)
+            link.destroy(code)
+            if (code === 'TIMEOUT') {
+                emit('timeout', { timeLimit, stage: 'connect' })
+            }
+            emit('connect', { ok: false, code })
+            return Promise.reject(code === 'TIMEOUT' ? `ftpConn timeout[${timeLimit}]` : msgConnect(code))
+        }
+        emit('connect', { ok: true })
+        return 'ok'
+    }
+
+    //adopt, 重新連線嘗試期間目前連線已被換掉時改用之: 待其就緒; 已quit或其conn失敗者reject
+    let adopt = async () => {
+        for (;;) {
+            let c = current
+            if (c !== null &amp;&amp; !c.ready &amp;&amp; !c.dead) {
+                await waitSettled(c)
+                continue
+            }
+            if (c === null || !c.ready) {
+                return Promise.reject({ kind: 'replaced', code: 'CLOSED' })
+            }
+            return c
+        }
+    }
+
+    //attempt, 一次重新連線嘗試, reject{ kind: 'connect'|'replay'|'replaced', code }
+    let attempt = async (old, entry, setCancel) => {
+        let link = null
+        try {
+            link = open()
+        }
+        catch (err) {
+            return Promise.reject({ kind: 'connect', code: codeOfConn(err) })
+        }
+        entry.cancel = () => {
+            if (pending === entry) {
+                pending = null //取消後之要求者另起新嘗試, 不併入已取消者
+            }
+            if (entry.replaying) {
+                clearIf(old) //重放中取消: 使用者狀態未能還原, 須重新conn
+            }
+            link.destroy()
+        }
+        if (isfun(setCancel)) {
+            setCancel(() => {
+                if (entry.joined === 0) { //他方已併入同一次嘗試者不取消(仍受本身timeLimit約束)
+                    entry.cancel()
+                }
+            })
+        }
+        try {
+            await waitReady(link, timeLimit)
+        }
+        catch (code) {
+            link.destroy()
+            if (current !== old) {
+                return adopt()
+            }
+            return Promise.reject({ kind: 'connect', code })
+        }
+        if (replay !== null) {
+            entry.replaying = true
+            try {
+                await replay(link, timeLimit)
+            }
+            catch (err) {
+                link.destroy()
+                if (current !== old) {
+                    return adopt()
+                }
+                clearIf(old) //無法重放使用者狀態, 不沿用
+                let code = typeof get(err, 'code') === 'number' ? String(err.code) : (link.code || 'CLOSED')
+                return Promise.reject({ kind: 'replay', code })
+            }
+        }
+        if (current !== old) { //嘗試期間已quit、已由另一方換上新連線或呼叫conn
+            link.destroy()
+            return adopt()
+        }
+        current = link
+        return link
+    }
+
+    //reconnect, 為死連線old重新連線, resolve{ link, reconnected }; 目前連線已非old者改用目前連線(reconnected為false)
+    let reconnect = async (old, o = {}) => {
+        if (current === null) {
+            return Promise.reject({ kind: 'quit', code: 'CLOSED' })
+        }
+        if (current !== old) {
+            let c = current
+            if (!c.dead &amp;&amp; !c.ready) { //另一方呼叫conn而尚未就緒
+                await waitSettled(c)
+                return reconnect(old, o)
+            }
+            if (!c.dead) {
+                return { link: c, reconnected: false }
+            }
+            if (!c.ready) { //另一方之conn失敗
+                return Promise.reject({ kind: 'replaced', code: 'CLOSED' })
+            }
+            old = c
+        }
+        if (pending !== null &amp;&amp; pending.old === old) {
+            pending.joined++
+            return pending.p
+        }
+        let entry = { old, p: null, joined: 0, replaying: false, cancel: null }
+        pending = entry
+        entry.p = attempt(old, entry, o.setCancel)
+            .then((link) => {
+                return { link, reconnected: true }
+            })
+        let clear = () => {
+            if (pending === entry) {
+                pending = null
+            }
+        }
+        entry.p.then(clear, clear)
+        return entry.p
+    }
+
+    //cancelPending, 取消針對死連線old之進行中重新連線嘗試(quit時呼叫, 使其連線不殘留); 針對其他連線者不動
+    let cancelPending = (old) => {
+        if (pending !== null &amp;&amp; pending.old === old &amp;&amp; pending.cancel !== null) {
+            pending.cancel()
+        }
+    }
+
+    //acquire, 取得供操作op使用之連線: 未conn或已quit者reject; conn未就緒者等待; 死連線可重新連線者重新連線(事件'reconnect'), 否則reject
+    let acquire = async (op, trace) => {
+        let emit = (ok) => {
+            if (trace) {
+                trace('reconnect', { ok })
+            }
+        }
+        for (;;) {
+            let link = current
+            if (link === null) {
+                return Promise.reject(msgNotInit)
+            }
+            if (!link.ready &amp;&amp; !link.dead) {
+                await waitSettled(link)
+                continue
+            }
+            if (!link.dead) {
+                return link
+            }
+            if (!link.ready) { //conn本身失敗(其reject由conn回報)
+                return Promise.reject(msgNotInit)
+            }
+            if (!canReconnect(link)) {
+                return Promise.reject(msgClosed(op, link.code))
+            }
+            let r = null
+            try {
+                r = await reconnect(link)
+            }
+            catch (e) {
+                let kind = get(e, 'kind')
+                if (kind !== 'quit') {
+                    emit(false)
+                }
+                return Promise.reject(msgOfReconnect(op, e))
+            }
+            if (r.reconnected) {
+                emit(true)
+            }
+            return r.link
+        }
+    }
+
+    return {
+        current: () => current,
+        connect,
+        acquire,
+        reconnect,
+        cancelPending,
+        clearIf,
+    }
+}
+
+
+//msgOfReconnect, 重新連線失敗物件{ kind, code }轉為op之固定訊息
+function msgOfReconnect(op, e) {
+    let kind = get(e, 'kind')
+    if (kind === 'replay') {
+        return msgRestore(op, e.code)
+    }
+    if (kind === 'quit' || kind === 'replaced') {
+        return msgNotInit
+    }
+    return msgReconnect(op, get(e, 'code', 'UNKNOWN'))
+}
+
+
+connKeeper.msgNotInit = msgNotInit
+connKeeper.codeOfConn = codeOfConn
+connKeeper.msgClosed = msgClosed
+connKeeper.msgFailed = msgFailed
+connKeeper.msgOfReconnect = msgOfReconnect
+connKeeper.genLink = genLink
+connKeeper.reqLink = reqLink
+
+
+export default connKeeper
+</code></pre>
+        </article>
+    </section>
+
+
+
+
+    
+    
+</div>
+
+<br class="clear">
+
+<footer>
+    Documentation generated by <a href="https://github.com/jsdoc3/jsdoc">JSDoc 4.0.5</a> on Sat Nov 28 2026 21:52:13 GMT+0800 (台北標準時間) using the <a href="https://github.com/clenemt/docdash">docdash</a> theme.
+</footer>
+
+<script>prettyPrint();</script>
+<script src="scripts/polyfill.js"></script>
+<script src="scripts/linenumber.js"></script>
+
+
+
+</body>
+</html>

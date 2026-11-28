@@ -5,9 +5,9 @@ import map from 'lodash-es/map.js'
 import filter from 'lodash-es/filter.js'
 import join from 'lodash-es/join.js'
 import isfun from 'wsemi/src/isfun.mjs'
+import isestr from 'wsemi/src/isestr.mjs'
 import ispint from 'wsemi/src/ispint.mjs'
 import strleft from 'wsemi/src/strleft.mjs'
-import sep from 'wsemi/src/sep.mjs'
 import strdelleft from 'wsemi/src/strdelleft.mjs'
 import fsTreeFolder from 'wsemi/src/fsTreeFolder.mjs'
 import fsIsFolder from 'wsemi/src/fsIsFolder.mjs'
@@ -46,25 +46,13 @@ async function ftpTreeFilesInLocalAndRemote(fdRemote, fdLocal, opt = {}) {
         let o = new RegExp(`\\\\`, 'g')
         r = String(r).replace(o, '/')
 
-        //_fdRemote
-        let _fdRemote = fdRemote
-        if (strleft(fdRemote, 1) === '.') {
-            _fdRemote = strdelleft(fdRemote, 1)
-        }
+        //merge, fdRemote之絕對('/'起首)維持絕對, 其'..'與'.'起首名稱原樣保留; 空段與'.'段略去, 名稱不修剪前後空白
+        let sfd = filter(String(isestr(fdRemote) ? fdRemote : '').split('/'), (v) => v !== '' && v !== '.')
+        let sr = filter(r.split('/'), (v) => v !== '')
+        r = join([...sfd, ...sr], '/')
+        let abs = isestr(fdRemote) && fdRemote.startsWith('/')
 
-        //merge
-        let sfd = sep(_fdRemote, '/')
-        // console.log('sfd', sfd, _fdRemote)
-        let sr = sep(r, '/')
-        // console.log('sr', sr, _fdRemote)
-        r = [...sfd, ...sr]
-        // console.log('merge r', r)
-        r = join(r, '/')
-        // console.log('join r', r)
-        r = `./${r}`
-        // console.log('r', r)
-
-        return r
+        return abs ? `/${r}` : `./${r}`
     }
 
     //optLocal, wsemi之fsTreeFolder自1.9.80起第2參數為opt, 未給opt.levelLimit即列舉全部層級, 故不限層數(null)時不給opt.levelLimit, 有限層數才給

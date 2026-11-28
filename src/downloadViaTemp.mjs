@@ -260,10 +260,11 @@ async function moveToTarget(fpTemp, fpLocal, trace) {
  * @param {Integer} o.timeLimit 輸入逾時毫秒
  * @param {String} o.stage 輸入階段名稱字串, 供觀察事件使用
  * @param {*} o.optCall 輸入單次呼叫之opt, 取onTrace
+ * @param {Function} [o.onTimeout=null] 輸入逾時時呼叫之中止函數(如銷毀本次所用之連線), 於reject之後呼叫, 拋錯忽略
  * @returns {Promise} 回傳Promise, resolve該階段之結果, reject該階段之錯誤或逾時訊息
  */
 function withTimeLimit(o) {
-    let { run, timeLimit, stage, optCall } = o
+    let { run, timeLimit, stage, optCall, onTimeout = null } = o
     let trace = traceOf(optCall)
     let pm = genPm()
     let t = setTimeout(() => {
@@ -271,6 +272,12 @@ function withTimeLimit(o) {
             trace('timeout', { timeLimit, stage })
         }
         pm.reject(`ftpDownload timeout[${timeLimit}]`)
+        if (isfun(onTimeout)) {
+            try {
+                onTimeout()
+            }
+            catch (err) {}
+        }
     }, Math.min(timeLimit, msTimerMax))
     Promise.resolve()
         .then(run)

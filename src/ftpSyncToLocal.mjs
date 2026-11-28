@@ -47,8 +47,13 @@ async function ftpSyncToLocal(fdRemote, fdLocal, cbProcess, opt = {}) {
         fsCreateFolder(fdLocal)
     }
 
+    //optLs, 轉交ftpLs之單次呼叫設定(觀察回調), 列舉階段之逾時與重新連線亦可觀察
+    let optLs = {
+        onTrace: get(opt, 'onTrace'),
+    }
+
     //ftpTreeFilesInLocalAndRemote
-    let r = await ftpTreeFilesInLocalAndRemote(fdRemote, fdLocal, { ftpLs, levelLimit })
+    let r = await ftpTreeFilesInLocalAndRemote(fdRemote, fdLocal, { ftpLs: (fd) => ftpLs(fd, optLs), levelLimit })
     let fsRemote = r.fsRemote
     let fsLocal = r.fsLocal
     // console.log('fsRemote', fsRemote)

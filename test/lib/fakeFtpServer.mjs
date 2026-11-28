@@ -8,10 +8,17 @@ import path from 'path'
  *
  * mode='normal'：實作jsftp所需之最小指令集（FEAT/SYST/USER/PASS/TYPE/STAT/MLST/SIZE/PASV/RETR/STOR/RNFR/RNTO/DELE/CWD/PWD/MKD/QUIT），以fdRoot為根目錄；STOR於收到指令時即建立(截斷)目標檔並隨數據逐段寫入(比照真實伺服器，中斷時留下部分內容)；控制連線關閉時一併關閉該工作階段之數據連線
  * mode='stall'：僅回應登入，其後所有指令停滯不回應，且收到FIN不回關（allowHalfOpen），重現測站FTP停滯致行程無法退出之情境
+ * mode='mute'：接受TCP連線後不送220歡迎訊息，亦不回應任何指令，重現連線建立階段停滯
+ *
+ * 目錄指令比照真實伺服器：CWD之目標不存在或非資料夾回550；MKD不遞迴建立，父資料夾不存在或目標已存在回550；PWD回目前工作目錄
  *
  * @param {Object} opt 輸入設定物件
- * @param {String} [opt.mode='normal'] 輸入模式字串，'normal'或'stall'，預設'normal'
+ * @param {String} [opt.mode='normal'] 輸入模式字串，'normal'、'stall'或'mute'，預設'normal'
  * @param {String} [opt.fdRoot='.'] 輸入伺服器根目錄字串，客戶端所見路徑皆相對於此資料夾，stall模式不使用
+ * @param {String} [opt.home='/'] 輸入登入後之工作目錄(伺服器端絕對路徑)字串，預設'/'
+ * @param {String} [opt.greeting='220 fake ftp server ready'] 輸入歡迎訊息行字串，供模擬拒絕服務(如421)之伺服器
+ * @param {Boolean} [opt.keepData=false] 輸入控制連線關閉時是否保留其數據連線布林值(供斷言客戶端自行釋放數據連線)，預設false
+ * @param {Function} [opt.hooks.GREET] 輸入歡迎訊息攔截函數，收到{ n, send }：n為第幾條控制連線(自1起)，呼叫send()才送歡迎訊息(可延後或不呼叫，send(line)改送該行)
  * @param {String} [opt.username='u1'] 輸入允許登入之帳號字串，預設'u1'
  * @param {String} [opt.password='p1'] 輸入允許登入之密碼字串，預設'p1'
  * @param {Integer} [opt.port=0] 輸入監聽port正整數，預設0代表由系統指派可用port
@@ -21,7 +28,8 @@ import path from 'path'
  * @param {Function} [opt.hooks.STOR] 輸入STOR攔截函數(可為async)，收到{ path, fp, reply, waitDs, closeDsrv, store, destroy }：fp為實體路徑，store()依原版接收並寫入，destroy()銷毀控制連線；供模擬停滯、只收部分、426、552等情境
  * @param {Function} [opt.hooks.CMD] 輸入任一指令(登入指令除外)之攔截函數，收到{ cmd, arg, reply, next, destroy }；回傳true代表已接手(不再依原版處理，可延後呼叫next()依原版處理、或不呼叫模擬停滯)
  * @param {Boolean} [opt.renameOverwrite=true] 輸入RNTO於目標已存在時是否覆蓋布林值，false比照拒絕覆蓋之伺服器回553，預設true
- * @returns {Promise} 回傳Promise，resolve回傳伺服器物件，內含實際監聽port正整數、指令紀錄陣列cmds、目前控制連線數函數nControl與關閉伺服器函數close
+ * @returns {Promise} 回傳Promise，resolve回傳伺服器物件，內含實際監聽port正整數、指令紀錄陣列cmds、目前控制連線數函數nControl、累計控制連線數函數nAccept、
+ *  伺服器主動關閉控制連線之函數dropControls({ how: '421'|'end'|'reset' }, 待各控制socket於伺服器端關閉後resolve)、等待控制連線數降至n之函數waitControls(n)與關閉伺服器函數close
  */
 let fakeFtpServer = async (opt = {}) => {
 
@@ -45,6 +53,43 @@ let fakeFtpServer = async (opt = {}) => {
 
     //renameOverwrite
     let renameOverwrite = opt.renameOverwrite !== false
+
+    //home, 登入後之工作目錄
+    let home = opt.home || '/'
+
+    //greeting
+    let greeting = opt.greeting || '220 fake ftp server ready'
+
+    //keepData
+    let keepData = opt.keepData === true
+
+    //dataSockets, 記錄開啟中之數據socket
+    let dataSockets = new Set()
+    let dataWaiters = []
+    let checkDataWaiters = () => {
+        dataWaiters = dataWaiters.filter((w) => {
+            if (dataSockets.size <= w.n) {
+                w.resolve()
+                return false
+            }
+            return true
+        })
+    }
+
+    //nAccept, 累計接受之控制連線數, 供斷言「未另建連線」
+    let nAccept = 0
+
+    //waiters, 等待控制連線數降至指定值
+    let waiters = []
+    let checkWaiters = () => {
+        waiters = waiters.filter((w) => {
+            if (controls.size <= w.n) {
+                w.resolve()
+                return false
+            }
+            return true
+        })
+    }
 
     //cmds, 依序記錄收到之指令(PASS不記密碼), 供測試斷言
     let cmds = []
@@ -180,15 +225,25 @@ let fakeFtpServer = async (opt = {}) => {
             socket.write('530 not logged in\r\n')
         }
         else if (cmd === 'PWD') {
-            socket.write('257 "/" is current directory\r\n')
+            socket.write(`257 "${state.cwd}" is current directory\r\n`)
         }
         else if (cmd === 'CWD') {
+            let rp = resolveP(state.cwd, arg)
+            if (!fs.existsSync(rp) || !fs.statSync(rp).isDirectory()) {
+                socket.write('550 failed to change directory\r\n')
+                return
+            }
             state.cwd = path.posix.resolve(state.cwd, arg)
             socket.write('250 ok\r\n')
         }
         else if (cmd === 'MKD') {
-            fs.mkdirSync(resolveP(state.cwd, arg), { recursive: true })
-            socket.write(`257 "${arg}" created\r\n`)
+            try {
+                fs.mkdirSync(resolveP(state.cwd, arg))
+                socket.write(`257 "${arg}" created\r\n`)
+            }
+            catch (err) {
+                socket.write('550 create directory operation failed\r\n')
+            }
         }
         else if (cmd === 'STAT') {
             let rp = resolveP(state.cwd, arg)
@@ -232,10 +287,16 @@ let fakeFtpServer = async (opt = {}) => {
             state.ds = null
             let dsrv = net.createServer((ds) => {
                 sockets.add(ds)
+                dataSockets.add(ds)
                 ds.on('error', () => {})
                 ds.on('close', () => {
                     sockets.delete(ds)
+                    dataSockets.delete(ds)
+                    checkDataWaiters()
                 })
+                if (keepData) {
+                    ds.resume() //讀掉資料, 使客戶端關閉能被察覺
+                }
                 state.ds = ds
                 if (state.onDs !== null) {
                     let f = state.onDs
@@ -343,14 +404,16 @@ let fakeFtpServer = async (opt = {}) => {
 
     //srv, stall模式使用allowHalfOpen, 收到客戶端FIN時socket維持半開不自動回關
     let srv = net.createServer({ allowHalfOpen: mode === 'stall' }, (socket) => {
+        nAccept++
         sockets.add(socket)
         controls.add(socket)
         socket.on('error', () => {}) //須catch, 避免客戶端斷線時拋出例外造成程序中止
-        let state = { cwd: '/', user: '', authed: false, ds: null, dsrv: null, onDs: null, buf: '', rnfr: null }
+        let state = { cwd: home, user: '', authed: false, ds: null, dsrv: null, onDs: null, buf: '', rnfr: null }
         socket.on('close', () => {
             sockets.delete(socket)
             controls.delete(socket)
-            if (mode !== 'stall') { //控制連線關閉即結束工作階段, 關閉其數據連線
+            checkWaiters()
+            if (mode !== 'stall' && !keepData) { //控制連線關閉即結束工作階段, 關閉其數據連線
                 if (state.ds !== null) {
                     state.ds.destroy()
                 }
@@ -363,6 +426,9 @@ let fakeFtpServer = async (opt = {}) => {
             while ((i = state.buf.indexOf('\r\n')) >= 0) {
                 let line = state.buf.slice(0, i)
                 state.buf = state.buf.slice(i + 2)
+                if (mode === 'mute') {
+                    continue
+                }
                 if (mode === 'stall') {
                     handleCmdStall(socket, state, line)
                 }
@@ -372,8 +438,56 @@ let fakeFtpServer = async (opt = {}) => {
                 }
             }
         })
-        socket.write('220 fake ftp server ready\r\n')
+        if (mode !== 'mute') {
+            let send = (line = greeting) => {
+                if (!socket.destroyed) {
+                    socket.write(`${line}\r\n`)
+                }
+            }
+            if (typeof hooks.GREET === 'function') {
+                hooks.GREET({ n: nAccept, send })
+            }
+            else {
+                send()
+            }
+        }
     })
+
+    //waitData, 等待開啟中之數據連線數降至n(含)以下
+    let waitData = (n) => {
+        return new Promise((resolve) => {
+            dataWaiters.push({ n, resolve })
+            checkDataWaiters()
+        })
+    }
+
+    //waitControls, 等待控制連線數降至n(含)以下
+    let waitControls = (n) => {
+        return new Promise((resolve) => {
+            waiters.push({ n, resolve })
+            checkWaiters()
+        })
+    }
+
+    //dropControls, 伺服器主動關閉現有控制連線(閒置逾時等), 待各控制socket於伺服器端關閉後resolve:
+    //  how='421'先送421再正常關閉(FIN), 'end'直接正常關閉, 'reset'以RST中斷
+    let dropControls = (o = {}) => {
+        let how = o.how || '421'
+        let ss = Array.from(controls)
+        let ps = ss.map((s) => new Promise((resolve) => {
+            s.once('close', resolve)
+            if (how === 'reset') {
+                s.resetAndDestroy()
+            }
+            else {
+                if (how === '421') {
+                    s.write('421 idle timeout, closing control connection\r\n')
+                }
+                s.end()
+            }
+        }))
+        return Promise.all(ps)
+    }
 
     //listen
     await new Promise((resolve) => {
@@ -397,6 +511,11 @@ let fakeFtpServer = async (opt = {}) => {
         port: srv.address().port,
         cmds,
         nControl: () => controls.size,
+        nAccept: () => nAccept,
+        dropControls,
+        waitControls,
+        nData: () => dataSockets.size,
+        waitData,
         close,
     }
 }

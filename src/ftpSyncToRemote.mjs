@@ -1,5 +1,5 @@
+import path from 'path'
 import get from 'lodash-es/get.js'
-import find from 'lodash-es/find.js'
 import iseobj from 'wsemi/src/iseobj.mjs'
 import isbol from 'wsemi/src/isbol.mjs'
 import ispint from 'wsemi/src/ispint.mjs'
@@ -39,12 +39,21 @@ async function ftpSyncToRemote(fdLocal, fdRemote, cbProcess, opt = {}) {
         onTrace: get(opt, 'onTrace'),
     }
 
+    //optLs, 轉交ftpLs之單次呼叫設定(觀察回調), 列舉階段之逾時與重新連線亦可觀察
+    let optLs = {
+        onTrace: get(opt, 'onTrace'),
+    }
+
     //ftpTreeFilesInLocalAndRemote
-    let r = await ftpTreeFilesInLocalAndRemote(fdRemote, fdLocal, { ftpLs, levelLimit })
+    let r = await ftpTreeFilesInLocalAndRemote(fdRemote, fdLocal, { ftpLs: (fd) => ftpLs(fd, optLs), levelLimit })
     let fsRemote = r.fsRemote
     let fsLocal = r.fsLocal
     // console.log('fsRemote', fsRemote)
     // console.log('fsLocal', fsLocal)
+
+    //比對鍵以posix.normalize正規化: 遠端路徑('<fdRemote>/<名稱>')與本機推得之遠端路徑('./...'或'/...')寫法不同(如fdRemote為'sub'或'sub/')仍視為同一檔
+    let key = (p) => path.posix.normalize(String(p))
+    let kpRemote = new Map(fsRemote.map((v) => [key(v.rpath), v]))
 
     //pmSeries
     let n = 0
@@ -57,7 +66,7 @@ async function ftpSyncToRemote(fdLocal, fdRemote, cbProcess, opt = {}) {
         // console.log('rpath', rpath)
 
         //fileRemote
-        let fileRemote = find(fsRemote, { rpath })
+        let fileRemote = kpRemote.get(key(rpath))
         // console.log('fileRemote', fileRemote)
 
         //fpRemote

@@ -215,7 +215,7 @@ describe('api-sftp-download-temp', function() {
         assert.strict.deepEqual(listDir(fdTemp), [])
     })
 
-    it('timeLimit生效: 停滯時依timeLimit逾時reject; 其後背景傳輸結束時只清暫存檔, 不移至目標', async function() {
+    it('timeLimit生效: 停滯時依timeLimit逾時reject並銷毀本次連線; 傳輸隨之以失敗結束, 只清暫存檔, 不移至目標', async function() {
         let fd = prepOut('n5')
         let fdTemp = `${fdBase}/temp-n5`
         let g = gate()
@@ -234,16 +234,17 @@ describe('api-sftp-download-temp', function() {
         assert.strict.ok(dt >= TL - 10, `逾時不得早於timeLimit: ${dt}`) //只斷言下界
         assertFile(`${fd}/big.bin`, OLD, '目標須為舊檔') //逾時時舊檔不動
 
-        //放行伺服器, 背景傳輸完成後, 須只清暫存檔、不移至目標
-        g.open()
-        await rec.wait((e) => e.type === 'transfer' && e.late === true)
+        //連線已銷毀(R-CN-02), 傳輸以失敗結束, 須只清暫存檔、不移至目標; 其後放行伺服器亦不改變結果
+        let [evT] = await rec.wait((e) => e.type === 'transfer' && e.late === true)
+        assert.strict.deepEqual(evT.ok, false) //規格(R-CN-02): 逾時銷毀本次所用之連線, 傳輸不再成功
         await rec.wait((e) => e.type === 'temp' && e.act === 'remove')
-        assert.strict.deepEqual(rec.evs.some((e) => e.type === 'move'), false) //規格: 逾時後之背景傳輸不得移至目標
+        g.open()
+        assert.strict.deepEqual(rec.evs.some((e) => e.type === 'move'), false) //規格: 逾時後之傳輸不得移至目標
         assertFile(`${fd}/big.bin`, OLD, '目標須為舊檔')
         assert.strict.deepEqual(listDir(fdTemp), []) //規格: 暫存最終被清除
     })
 
-    it('逾時發生於開啟本地檔之前(伺服器停滯於OPEN): 其後背景傳輸重建暫存檔並傳完, 仍不移至目標且暫存被清', async function() {
+    it('逾時發生於開啟本地檔之前(伺服器停滯於OPEN): 連線銷毀使傳輸以失敗結束, 不重建暫存檔, 仍不移至目標且暫存被清', async function() {
         let fd = prepOut('n5b')
         let fdTemp = `${fdBase}/temp-n5b`
         let g = gate()
@@ -258,27 +259,35 @@ describe('api-sftp-download-temp', function() {
         assert.strict.deepEqual(r.err, `ftpDownload timeout[${TL}]`)
         assert.strict.deepEqual(listDir(fdTemp), []) //逾時當下先刪暫存檔名
 
-        //放行OPEN, fastGet於逾時後才以'w'開啟本地暫存檔(重建)並傳完, 須只清暫存檔、不移至目標
-        g.open()
-        await rec.wait((e) => e.type === 'transfer' && e.late === true)
+        //連線已銷毀(R-CN-02), 傳輸以失敗結束; 其後放行OPEN亦不再開啟本地暫存檔, 不移至目標
+        let [evT] = await rec.wait((e) => e.type === 'transfer' && e.late === true)
+        assert.strict.deepEqual(evT.ok, false)
         await rec.wait((e) => e.type === 'temp' && e.act === 'remove')
-        assert.strict.deepEqual(rec.evs.some((e) => e.type === 'move'), false) //規格: 逾時後之背景傳輸不得移至目標
+        g.open()
+        assert.strict.deepEqual(rec.evs.some((e) => e.type === 'move'), false) //規格: 逾時後之傳輸不得移至目標
         assertFile(`${fd}/big.bin`, OLD, '目標須為舊檔')
         assert.strict.deepEqual(listDir(fdTemp), []) //規格: 暫存最終被清除
     })
 
-    it('逾時後背景仍在傳輸時重試同一檔: 不與背景相撞, 重試結果為新內容, 背景結束後不覆蓋且暫存清除', async function() {
+    it('逾時後同一實例直接重試同一檔: 重新連線, 重試結果為新內容, 先前之傳輸不覆蓋且暫存清除', async function() {
         let fd = prepOut('n6')
         let fdTemp = `${fdBase}/temp-n6`
         let g = gate()
         let hFirst = null
+        let cFirst = null
         let srv = await newSrv({
             READ: (ctx) => {
                 if (hFirst === null) {
                     hFirst = ctx.handle
+                    cFirst = ctx.client
                 }
-                if (ctx.handle === hFirst) {
-                    g.wait().then(ctx.respond) //只停滯第1次開啟之讀取
+                if (ctx.handle === hFirst && ctx.client === cFirst) { //開啟代號於每次連線重新編號, 故併同連線判定
+                    g.wait().then(() => {
+                        try {
+                            ctx.respond()
+                        }
+                        catch (err) {}
+                    })
                     return
                 }
                 ctx.respond()
@@ -289,7 +298,7 @@ describe('api-sftp-download-temp', function() {
         let r1 = await settleWithin(ftp.download('./big.bin', `${fd}/big.bin`, null, { onTrace: rec1.onTrace }), TL + 10000)
         assert.strict.deepEqual(r1.err, `ftpDownload timeout[${TL}]`)
 
-        //同一實例、同一連線重試同一檔(第1次仍於背景停滯)
+        //同一實例直接重試同一檔(第1次之連線已銷毀, 本次先重新連線), 伺服器對第1次之讀取仍停滯
         let r2 = await settleWithin(ftp.download('./big.bin', `${fd}/big.bin`), TL + 10000)
         assert.strict.deepEqual(r2.settled && r2.ok, true, `重試須成功: ${String(r2.err)}`)
         assertFile(`${fd}/big.bin`, bufBig, '目標須為新內容')

@@ -58,7 +58,12 @@ let versionWithPosixRename = (() => {
  * @param {String} [opt.username='u1'] 輸入允許登入之帳號字串，預設'u1'
  * @param {String} [opt.password='p1'] 輸入允許登入之密碼字串，預設'p1'
  * @param {Integer} [opt.port=0] 輸入監聽port正整數，預設0代表由系統指派可用port
+ * @param {String} [opt.home='/'] 輸入登入後之目前資料夾(伺服器端絕對路徑)字串, 相對路徑與REALPATH('.')以此解析，預設'/'
  * @param {Boolean} [opt.posixRename=true] 輸入是否宣告並支援posix-rename@openssh.com擴充布林值，預設true
+ * @param {Function} [opt.hooks.OPENDIR] 輸入OPENDIR攔截函數，收到{ client, path, respond }；不呼叫respond()模擬停滯
+ * @param {Function} [opt.hooks.READDIR] 輸入READDIR攔截函數，收到{ client, respond }；不呼叫respond()模擬停滯
+ * @param {Function} [opt.hooks.REALPATH] 輸入REALPATH攔截函數，收到{ client, path, respond }；不呼叫respond()模擬停滯
+ * @param {Function} [opt.hooks.MKDIR] 輸入MKDIR攔截函數，收到{ client, path, respond }；不呼叫respond()模擬停滯
  * @param {Object} [opt.hooks={}] 輸入測試用之攔截函數物件，未給之鍵行為同原版，預設{}
  * @param {Function} [opt.hooks.READ] 輸入READ攔截函數，收到{ handle, offset, len, client, respond }，handle為該檔開啟代號字串(每次OPEN不同)，呼叫respond()即依原版回應；可延後呼叫(模擬停滯)、或不呼叫而以client.end()斷線(模擬傳輸中途斷線)
  * @param {Function} [opt.hooks.OPEN] 輸入OPEN攔截函數，收到{ client, path, write, respond, fail }，呼叫respond()即依原版回應、fail()回傳失敗；可延後呼叫(模擬停滯於開啟遠端檔)
@@ -67,8 +72,9 @@ let versionWithPosixRename = (() => {
  * @param {Function} [opt.hooks.statSize] 輸入STAT與LSTAT回報大小之改寫函數，收到(實際大小, 客戶端路徑)回傳回報大小(FSTAT不改寫)，供模擬遠端回報大小與實際傳輸大小不符
  * @param {Function} [opt.hooks.RENAME] 輸入RENAME與posix-rename攔截函數，收到{ client, from, to, posix, respond, deny }，呼叫respond()即依原版回應、deny()回傳權限不足
  * @param {Function} [opt.hooks.REMOVE] 輸入REMOVE攔截函數，收到{ client, path, respond, deny }，呼叫respond()即依原版回應、deny()回傳權限不足
- * @param {Function} [opt.hooks.AUTH] 輸入認證攔截函數，回傳false即拒絕認證(模擬重新連線被拒)
- * @returns {Promise} 回傳Promise，resolve回傳伺服器物件，內含實際監聽port正整數、操作紀錄陣列ops與關閉伺服器函數close
+ * @param {Function} [opt.hooks.AUTH] 輸入認證攔截函數，收到{ method, n }(n為第幾條連線，自1起)；回傳false即拒絕認證(模擬重新連線被拒)，回傳Promise則待其resolve後照原版處理(模擬認證停滯)
+ * @returns {Promise} 回傳Promise，resolve回傳伺服器物件，內含實際監聽port正整數、操作紀錄陣列ops、目前連線數函數nClient、累計連線數函數nAccept、
+ *  伺服器主動斷線函數dropClients(待各客戶端連線關閉後resolve)、等待連線數降至n之函數waitClients(n)與關閉伺服器函數close
  */
 let fakeSftpServer = async(opt = {}) => {
 
@@ -99,9 +105,27 @@ let fakeSftpServer = async(opt = {}) => {
     //hostKeys, 執行期即時生成(行程內共用, 見getHostKey)
     let hk = getHostKey()
 
-    //toReal, 將客戶端路徑轉為根目錄內實體路徑, 並限制不可逃逸至根目錄外
+    //home, 登入後之目前資料夾
+    let home = opt.home || '/'
+
+    //nAccept, 累計接受之連線數
+    let nAccept = 0
+
+    //waiters, 等待連線數降至指定值
+    let waiters = []
+    let checkWaiters = () => {
+        waiters = waiters.filter((w) => {
+            if (clients.size <= w.n) {
+                w.resolve()
+                return false
+            }
+            return true
+        })
+    }
+
+    //toReal, 將客戶端路徑(相對路徑以home解析)轉為根目錄內實體路徑, 並限制不可逃逸至根目錄外
     let toReal = (p) => {
-        return path.resolve(fdRoot, '.' + path.posix.resolve('/', p))
+        return path.resolve(fdRoot, '.' + path.posix.resolve(home, p))
     }
 
     //toAttrs
@@ -239,14 +263,24 @@ let fakeSftpServer = async(opt = {}) => {
         })
 
         sftp.on('MKDIR', (id, p) => {
-            try {
-                fs.mkdirSync(toReal(p))
-                ops.push({ op: 'mkdir', path: p, ok: true })
-                sftp.status(id, STATUS_CODE.OK)
+            let respond = () => {
+                if (!alive) {
+                    return
+                }
+                try {
+                    fs.mkdirSync(toReal(p))
+                    ops.push({ op: 'mkdir', path: p, ok: true })
+                    sftp.status(id, STATUS_CODE.OK)
+                }
+                catch (err) {
+                    sftp.status(id, codeStatus(err))
+                }
             }
-            catch (err) {
-                sftp.status(id, codeStatus(err))
+            if (typeof hooks.MKDIR === 'function') {
+                hooks.MKDIR({ client, path: p, respond })
+                return
             }
+            respond()
         })
 
         sftp.on('SETSTAT', (id) => {
@@ -281,8 +315,18 @@ let fakeSftpServer = async(opt = {}) => {
         })
 
         sftp.on('REALPATH', (id, p) => {
-            let rp = path.posix.resolve('/', p === '.' ? '/' : p)
-            sftp.name(id, [{ filename: rp, longname: rp, attrs: {} }])
+            let respond = () => {
+                if (!alive) {
+                    return
+                }
+                let rp = path.posix.resolve(home, p)
+                sftp.name(id, [{ filename: rp, longname: rp, attrs: {} }])
+            }
+            if (typeof hooks.REALPATH === 'function') {
+                hooks.REALPATH({ client, path: p, respond })
+                return
+            }
+            respond()
         })
 
         sftp.on('STAT', onStat)
@@ -298,32 +342,52 @@ let fakeSftpServer = async(opt = {}) => {
         })
 
         sftp.on('OPENDIR', (id, p) => {
-            let rp = toReal(p)
-            if (!fs.existsSync(rp) || !fs.statSync(rp).isDirectory()) {
-                return sftp.status(id, STATUS_CODE.NO_SUCH_FILE)
+            let respond = () => {
+                if (!alive) {
+                    return
+                }
+                let rp = toReal(p)
+                if (!fs.existsSync(rp) || !fs.statSync(rp).isDirectory()) {
+                    return sftp.status(id, STATUS_CODE.NO_SUCH_FILE)
+                }
+                let key = `d${nHandle}`
+                nHandle += 1
+                handles[key] = { type: 'dir', rp, hasRead: false }
+                sftp.handle(id, Buffer.from(key))
             }
-            let key = `d${nHandle}`
-            nHandle += 1
-            handles[key] = { type: 'dir', rp, hasRead: false }
-            sftp.handle(id, Buffer.from(key))
+            if (typeof hooks.OPENDIR === 'function') {
+                hooks.OPENDIR({ client, path: p, respond })
+                return
+            }
+            respond()
         })
 
         sftp.on('READDIR', (id, h) => {
-            let hd = handles[h.toString()]
-            if (!hd || hd.type !== 'dir' || hd.hasRead) {
-                return sftp.status(id, STATUS_CODE.EOF) //需回傳EOF告知客戶端已列舉完畢
-            }
-            hd.hasRead = true
-            let names = fs.readdirSync(hd.rp).map((name) => {
-                let stat = fs.statSync(path.join(hd.rp, name))
-                let mark = stat.isDirectory() ? 'd' : '-'
-                return {
-                    filename: name,
-                    longname: `${mark}rw-r--r-- 1 user user ${stat.size} Jan 1 00:00 ${name}`,
-                    attrs: toAttrs(stat),
+            let respond = () => {
+                if (!alive) {
+                    return
                 }
-            })
-            sftp.name(id, names)
+                let hd = handles[h.toString()]
+                if (!hd || hd.type !== 'dir' || hd.hasRead) {
+                    return sftp.status(id, STATUS_CODE.EOF) //需回傳EOF告知客戶端已列舉完畢
+                }
+                hd.hasRead = true
+                let names = fs.readdirSync(hd.rp).map((name) => {
+                    let stat = fs.statSync(path.join(hd.rp, name))
+                    let mark = stat.isDirectory() ? 'd' : '-'
+                    return {
+                        filename: name,
+                        longname: `${mark}rw-r--r-- 1 user user ${stat.size} Jan 1 00:00 ${name}`,
+                        attrs: toAttrs(stat),
+                    }
+                })
+                sftp.name(id, names)
+            }
+            if (typeof hooks.READDIR === 'function') {
+                hooks.READDIR({ client, respond })
+                return
+            }
+            respond()
         })
 
         sftp.on('OPEN', (id, p, flags) => {
@@ -390,24 +454,40 @@ let fakeSftpServer = async(opt = {}) => {
 
     //srv
     let srv = new Server({ hostKeys: [hk] }, (client) => {
+        nAccept++
         clients.add(client)
         client.on('close', () => {
             clients.delete(client)
+            checkWaiters()
         })
+        let n = nAccept
         client.on('authentication', (ctx) => {
-            if (typeof hooks.AUTH === 'function' && hooks.AUTH() === false) {
+            let proc = () => {
+                if (ctx.method === 'password' && ctx.username === username && ctx.password === password) {
+                    ctx.accept()
+                }
+                else if (ctx.method === 'none') {
+                    ctx.reject(['password']) //告知客戶端須使用password認證
+                }
+                else {
+                    ctx.reject()
+                }
+            }
+            let v = typeof hooks.AUTH === 'function' ? hooks.AUTH({ method: ctx.method, n }) : true
+            if (v === false) {
                 ctx.reject()
                 return
             }
-            if (ctx.method === 'password' && ctx.username === username && ctx.password === password) {
-                ctx.accept()
+            if (v && typeof v.then === 'function') {
+                v.then(() => {
+                    try {
+                        proc()
+                    }
+                    catch (err) {}
+                })
+                return
             }
-            else if (ctx.method === 'none') {
-                ctx.reject(['password']) //告知客戶端須使用password認證
-            }
-            else {
-                ctx.reject()
-            }
+            proc()
         })
         client.on('ready', () => {
             client.on('session', (accept) => {
@@ -446,9 +526,30 @@ let fakeSftpServer = async(opt = {}) => {
         })
     }
 
+    //dropClients, 伺服器主動斷線, 待各客戶端連線關閉後resolve
+    let dropClients = () => {
+        let ps = Array.from(clients).map((c) => new Promise((resolve) => {
+            c.once('close', resolve)
+            c.end()
+        }))
+        return Promise.all(ps)
+    }
+
+    //waitClients, 等待連線數降至n(含)以下
+    let waitClients = (n) => {
+        return new Promise((resolve) => {
+            waiters.push({ n, resolve })
+            checkWaiters()
+        })
+    }
+
     return {
         port: srv.address().port,
         ops,
+        nClient: () => clients.size,
+        nAccept: () => nAccept,
+        dropClients,
+        waitClients,
         close,
     }
 }

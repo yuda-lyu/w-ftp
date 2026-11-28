@@ -16,9 +16,8 @@ describe('api-ftp-stall', function() {
         await srv.close()
     })
 
-    it('伺服器停滯時: ls與quit依timeLimit逾時reject, quit後再操作被拒絕', async function() {
-
-        let ftp = WFtp({
+    let newFtp = () => {
+        return WFtp({
             transportation: 'FTP',
             hostname: '127.0.0.1',
             port: srv.port,
@@ -26,28 +25,42 @@ describe('api-ftp-stall', function() {
             password: 'p1',
             timeLimit: 1500,
         })
+    }
 
-        //conn, 僅建構實例不實際連線, 故停滯伺服器下仍成功
+    let errOf = (p) => {
+        return p.then(() => null)
+            .catch((e) => e)
+    }
+
+    it('伺服器停滯時: ls依timeLimit逾時reject並銷毀連線, 其後quit直接完成, quit後再操作被拒絕', async function() {
+
+        let ftp = newFtp()
+
+        //conn, 收到歡迎訊息即成功(停滯模式仍送220)
         let r = await ftp.conn()
         assert.strict.deepEqual(r, 'ok')
 
         //ls, 逾時reject
-        let errLs = await ftp.ls('.')
-            .then(() => null)
-            .catch((e) => e)
-        assert.strict.deepEqual(errLs, 'ftpLs timeout[1500]')
+        assert.strict.deepEqual(await errOf(ftp.ls('.')), 'ftpLs timeout[1500]')
 
-        //quit, 逾時reject並清理連線
-        let errQuit = await ftp.quit()
-            .then(() => null)
-            .catch((e) => e)
-        assert.strict.deepEqual(errQuit, 'ftpQuit timeout[1500]')
+        //quit, 逾時已銷毀連線(規則R-CN-02), 不另建連線送QUIT, 直接完成
+        assert.strict.deepEqual(await ftp.quit(), 'ok')
 
         //quit後再操作被拒絕
-        let errLs2 = await ftp.ls('.')
-            .then(() => null)
-            .catch((e) => e)
-        assert.strict.deepEqual(errLs2, `FTP has not been initialized. please use 'conn' to construct FTP`)
+        assert.strict.deepEqual(await errOf(ftp.ls('.')), `FTP has not been initialized. please use 'conn' to construct FTP`)
+
+    })
+
+    it('伺服器停滯時: 連線仍存活之quit依timeLimit逾時reject, quit後再操作被拒絕', async function() {
+
+        let ftp = newFtp()
+        await ftp.conn()
+
+        //quit, 逾時reject並清理連線
+        assert.strict.deepEqual(await errOf(ftp.quit()), 'ftpQuit timeout[1500]')
+
+        //quit後再操作被拒絕
+        assert.strict.deepEqual(await errOf(ftp.ls('.')), `FTP has not been initialized. please use 'conn' to construct FTP`)
 
     })
 

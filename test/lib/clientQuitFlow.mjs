@@ -1,8 +1,9 @@
-//供api-ftp-stall-exit測試之子行程: 對停滯伺服器執行conn→ls→quit後自然結束, 不呼叫process.exit, 用以驗證quit硬關閉socket後event loop可清空使行程自行退出
+//供api-ftp-stall-exit測試之子行程: 對停滯伺服器執行conn→(情境ls時先ls)→quit後自然結束, 不呼叫process.exit, 用以驗證逾時與quit硬關閉socket後event loop可清空使行程自行退出
 import WFtp from '../../src/WFtp.mjs'
 
 let port = Number(process.argv[2])
 let timeLimit = Number(process.argv[3]) || 2000
+let scenario = process.argv[4] || 'ls'
 
 let ftp = WFtp({
     transportation: 'FTP',
@@ -18,12 +19,16 @@ let main = async () => {
         .catch((err) => {
             console.log('conn err:', err.toString())
         })
-    await ftp.ls('.')
-        .catch((err) => {
-            console.log('ls err:', err.toString())
-        })
+    if (scenario === 'ls') {
+        await ftp.ls('.')
+            .catch((err) => {
+                console.log('ls err:', err.toString())
+            })
+    }
     await ftp.quit()
-        .catch((err) => {
+        .then((r) => {
+            console.log('quit ok:', String(r))
+        }, (err) => {
             console.log('quit err:', err.toString())
         })
     console.log('flow done')
